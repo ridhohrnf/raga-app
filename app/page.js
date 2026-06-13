@@ -42,7 +42,7 @@ import {
   ReferenceLine
 } from 'recharts';
 import confetti from 'canvas-confetti';
-import { ConfigProvider, theme, DatePicker, Select, Button, Input, InputNumber, Upload, Modal } from 'antd';
+import { ConfigProvider, theme, DatePicker, Select, Button, Input, InputNumber, Upload, Modal, message } from 'antd';
 import dayjs from 'dayjs';
 import 'dayjs/locale/id'; // Indonesian locale for Day.js
 
@@ -242,7 +242,6 @@ export default function Home() {
   const [expandMacros, setExpandMacros] = useState(false);
   const [profileForm, setProfileForm] = useState({ weight: '', height: '', age: '', gender: 'male', activityLevel: 'moderate', fitnessGoal: 'maintenance', workoutProgram: 'Upper, Lower' });
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [profileSuccess, setProfileSuccess] = useState('');
   const [profileError, setProfileError] = useState('');
 
   // Daily target custom override states
@@ -442,7 +441,6 @@ export default function Home() {
 
   const handleUpdateProfile = async (e) => {
     if (e) e.preventDefault();
-    setProfileSuccess('');
     setProfileError('');
 
     const parsedWeight = parseFloat(profileForm.weight);
@@ -471,11 +469,8 @@ export default function Home() {
       const data = await res.json();
       if (res.ok) {
         setUser(data.user);
-        setProfileSuccess('Profil dan target kalori berhasil diperbarui!');
-        setTimeout(() => {
-          setShowProfileModal(false);
-          setProfileSuccess('');
-        }, 1500);
+        message.success('Profil dan target kalori berhasil diperbarui!');
+        setShowProfileModal(false);
       } else {
         setProfileError(data.error || 'Gagal memperbarui profil.');
       }
@@ -1708,6 +1703,20 @@ export default function Home() {
     }
   };
 
+  const cancelActiveWorkout = () => {
+    Modal.confirm({
+      title: 'Batalkan Sesi Latihan?',
+      content: 'Semua progres latihan yang sedang berjalan dan belum disimpan akan terhapus.',
+      okText: 'Ya, Batalkan',
+      cancelText: 'Tidak',
+      okType: 'danger',
+      centered: true,
+      onOk: () => {
+        setActiveWorkout(null);
+      }
+    });
+  };
+
   const deleteWorkout = async (id) => {
     if (!confirm('Apakah Anda yakin ingin menghapus sesi latihan ini?')) return;
     try {
@@ -1818,6 +1827,7 @@ export default function Home() {
             colorBorder: '#333336',
             borderRadius: 8,
             colorText: '#ffffff',
+            fontSize: 14,
           }
         }}
       >
@@ -1927,6 +1937,7 @@ export default function Home() {
             colorBorder: '#333336',
             borderRadius: 8,
             colorText: '#ffffff',
+            fontSize: 14,
           }
         }}
       >
@@ -2136,6 +2147,7 @@ export default function Home() {
           colorBorder: '#333336',
           borderRadius: 8,
           colorText: '#ffffff',
+          fontSize: 14,
         }
       }}
     >
@@ -2872,7 +2884,6 @@ export default function Home() {
                                   <span>{set.weight} kg</span>
                                   <span>x</span>
                                   <span>{set.reps} r</span>
-                                  {set.rpe && <span>(RPE {set.rpe})</span>}
                                 </div>
                               ))}
                             </div>
@@ -3014,18 +3025,17 @@ export default function Home() {
 
                       {/* Sets Table */}
                       <div className="overflow-x-auto w-full pb-1">
-                        <div className="min-w-[400px] flex flex-col gap-2">
-                          <div className="grid grid-cols-[36px_1.2fr_1.2fr_1fr_50px] gap-2 mb-1 text-[10px] text-muted font-bold uppercase tracking-wider text-center">
+                        <div className="min-w-[320px] flex flex-col gap-2">
+                          <div className="grid grid-cols-[36px_1.5fr_1.5fr_50px] gap-2 mb-1 text-[10px] text-muted font-bold uppercase tracking-wider text-center">
                             <div className="text-left pl-2">Set</div>
                             <div>Beban</div>
                             <div>Reps</div>
-                            <div>RPE</div>
                             <div>Centang</div>
                           </div>
 
                           {ex.sets.map((set, setIdx) => (
                             <div key={setIdx} className="flex flex-col gap-1.5">
-                              <div className="grid grid-cols-[36px_1.2fr_1.2fr_1fr_50px] gap-2 items-end">
+                              <div className="grid grid-cols-[36px_1.5fr_1.5fr_50px] gap-2 items-end">
                                 {/* Set Number Column */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
                                   <span style={{ height: '11px', display: 'block' }}></span>
@@ -3064,20 +3074,6 @@ export default function Home() {
                                       onChange={e => updateSetValues(exIdx, setIdx, 'reps', e.target.value === '' ? '' : parseInt(e.target.value))}
                                     />
                                     <span>reps</span>
-                                  </div>
-                                </div>
-
-                                {/* RPE Input */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                  <span style={{ height: '11px', display: 'block' }}></span>
-                                  <div className="input-wrapper-suffix">
-                                    <input 
-                                      type="number" 
-                                      placeholder={set.target_rir !== undefined && set.target_rir !== null ? `rir ${set.target_rir}` : "-"}
-                                      value={set.rpe !== undefined && set.rpe !== null ? set.rpe : ''}
-                                      onChange={e => updateSetValues(exIdx, setIdx, 'rpe', e.target.value === '' ? '' : parseInt(e.target.value))}
-                                    />
-                                    <span>rpe</span>
                                   </div>
                                 </div>
 
@@ -3155,7 +3151,18 @@ export default function Home() {
                     onClick={saveActiveWorkout}
                     className="h-12 text-sm font-semibold"
                   >
-                    Save
+                    Simpan Latihan
+                  </Button>
+
+                  <Button 
+                    danger
+                    size="large" 
+                    block 
+                    onClick={cancelActiveWorkout}
+                    className="h-12 text-sm font-semibold border-none"
+                    style={{ color: '#ff453a', background: 'rgba(255, 69, 58, 0.1)' }}
+                  >
+                    Batalkan Sesi Latihan
                   </Button>
                 </div>
               </>
@@ -3730,7 +3737,7 @@ export default function Home() {
                     className="h-10 text-xs bg-white/5 border-white/10"
                   />
 
-                  <div className="flex flex-col gap-2 max-h-40 overflow-y-auto mt-1 pr-1">
+                  <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto mt-1 pr-1">
                     {foodLibrary
                       .filter(item => item.name.toLowerCase().includes(searchFoodTerm.toLowerCase()))
                       .map(item => (
@@ -3762,7 +3769,7 @@ export default function Home() {
                               });
                             }
                           }}
-                          className={`flex flex-col gap-1.5 bg-white/5 border rounded-xl p-2.5 cursor-pointer hover:bg-white/10 transition-all ${selectedLibraryFood?.id === item.id ? 'border-purple' : 'border-white/5'}`}
+                          className={`flex flex-col gap-1.5 bg-white/5 border rounded-xl p-2.5 cursor-pointer hover:bg-white/10 transition-all ${selectedLibraryFood?.id === item.id ? 'border-purple bg-white/[0.07]' : 'border-white/5'}`}
                         >
                           <div className="flex justify-between items-center w-full">
                             <span className="font-semibold text-slate-200 text-xs">{item.name}, {Math.round(parseFloat(item.calories))} kcal</span>
@@ -3777,125 +3784,117 @@ export default function Home() {
                             )}
                           </div>
                           
-                          <div className={`expandable-details ${selectedLibraryFood?.id === item.id ? 'expanded' : ''}`}>
-                            <div className="flex gap-3 text-[9.5px] text-muted flex-wrap">
+                          <div 
+                            className={`expandable-details ${selectedLibraryFood?.id === item.id ? 'expanded' : ''}`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex gap-3 text-[9.5px] text-muted flex-wrap mb-2">
                               <span>Protein: {parseFloat(item.protein)}g</span>
                               <span>Karbo: {parseFloat(item.carbs)}g</span>
                               <span>Lemak: {parseFloat(item.fat)}g</span>
                               <span className="italic text-[8.5px]">(per {parseFloat(item.serving_g || 100)}g)</span>
                             </div>
+
+                            {selectedLibraryFood?.id === item.id && (
+                              <div className="flex flex-col gap-3 pt-2 border-t border-white/5 mt-1">
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[10px] text-secondary">Berat Makanan (gram)</label>
+                                  <div className="input-wrapper-suffix h-9">
+                                    <input 
+                                      type="number" 
+                                      min="1"
+                                      value={mealForm.weightG}
+                                      onChange={e => {
+                                        const val = parseFloat(e.target.value) || 0;
+                                        setMealForm({
+                                          ...mealForm,
+                                          weightG: val,
+                                          calories: Math.round(parseFloat(item.calories) * (val / parseFloat(item.serving_g || 100))),
+                                          protein: Math.round(parseFloat(item.protein) * (val / parseFloat(item.serving_g || 100)) * 10) / 10,
+                                          carbs: Math.round(parseFloat(item.carbs) * (val / parseFloat(item.serving_g || 100)) * 10) / 10,
+                                          fat: Math.round(parseFloat(item.fat) * (val / parseFloat(item.serving_g || 100)) * 10) / 10
+                                        });
+                                      }}
+                                    />
+                                    <span>gram</span>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-4 gap-1.5 text-center text-[9.5px] bg-black/30 p-2 rounded-lg border border-white/5">
+                                  <div>
+                                    <span className="text-muted block text-[8px] uppercase font-semibold">Kalori</span>
+                                    <span className="font-bold text-slate-200">{mealForm.calories} kcal</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted block text-[8px] uppercase font-semibold">Protein</span>
+                                    <span className="font-bold text-slate-200">{mealForm.protein}g</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted block text-[8px] uppercase font-semibold">Karbo</span>
+                                    <span className="font-bold text-slate-200">{mealForm.carbs}g</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted block text-[8px] uppercase font-semibold">Lemak</span>
+                                    <span className="font-bold text-slate-200">{mealForm.fat}g</span>
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-col gap-1.5">
+                                  {mealImage ? (
+                                    <div className="flex items-center justify-between bg-white/5 border border-white/10 p-1.5 rounded-lg">
+                                      <div className="flex items-center gap-2">
+                                        <img src={mealImage} alt="Preview" className="w-8 h-8 object-cover rounded border border-white/10" />
+                                        <span className="text-[9px] text-muted">Foto ditambahkan</span>
+                                      </div>
+                                      <button 
+                                        type="button" 
+                                        onClick={() => setMealImage(null)} 
+                                        className="text-rose-400 hover:text-rose-300 text-[9px] font-semibold px-2 py-1 rounded bg-white/5 border border-white/5"
+                                      >
+                                        Hapus
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <label className="flex items-center justify-center gap-1.5 h-9 border border-dashed border-white/10 hover:border-purple/35 rounded-lg cursor-pointer bg-white/5 hover:bg-white/10 transition-all text-muted hover:text-slate-200">
+                                      <Camera className="w-3.5 h-3.5 text-secondary" />
+                                      <span className="text-[10px]">Foto Makanan (Opsional)</span>
+                                      <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        className="hidden" 
+                                        onChange={e => {
+                                          const file = e.target.files?.[0];
+                                          if (file) {
+                                            if (file.size / 1024 / 1024 >= 2.5) {
+                                              alert('Ukuran foto terlalu besar. Maksimal 2.5 MB.');
+                                              return;
+                                            }
+                                            const reader = new FileReader();
+                                            reader.readAsDataURL(file);
+                                            reader.onload = () => {
+                                              setMealImage(reader.result);
+                                            };
+                                          }
+                                        }}
+                                      />
+                                    </label>
+                                  )}
+                                </div>
+
+                                <Button 
+                                  type="primary" 
+                                  loading={submittingMeal}
+                                  onClick={(e) => { e.preventDefault(); handleAddMealLog(); }}
+                                  className="h-9 text-xs font-semibold mt-1"
+                                >
+                                  Catat Makanan
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
                   </div>
-
-                  <form 
-                    onSubmit={handleAddMealLog} 
-                    className={`expandable-form flex flex-col gap-3 bg-purple/5 rounded-xl ${selectedLibraryFood ? 'expanded' : ''}`}
-                  >
-                    {selectedLibraryFood && (
-                      <>
-                        <span className="font-bold text-xs text-purple">Terpilih: {selectedLibraryFood.name}</span>
-                        
-                        <div className="flex gap-3">
-                          <div className="flex-1 flex flex-col gap-1">
-                            <label className="text-[10px] text-secondary">Berat Makanan (gram)</label>
-                            <div className="input-wrapper-suffix h-10">
-                              <input 
-                                type="number" 
-                                min="1"
-                                value={mealForm.weightG}
-                                onChange={e => {
-                                  const val = parseFloat(e.target.value) || 0;
-                                  setMealForm({
-                                    ...mealForm,
-                                    weightG: val,
-                                    calories: Math.round(parseFloat(selectedLibraryFood.calories) * (val / parseFloat(selectedLibraryFood.serving_g || 100))),
-                                    protein: Math.round(parseFloat(selectedLibraryFood.protein) * (val / parseFloat(selectedLibraryFood.serving_g || 100)) * 10) / 10,
-                                    carbs: Math.round(parseFloat(selectedLibraryFood.carbs) * (val / parseFloat(selectedLibraryFood.serving_g || 100)) * 10) / 10,
-                                    fat: Math.round(parseFloat(selectedLibraryFood.fat) * (val / parseFloat(selectedLibraryFood.serving_g || 100)) * 10) / 10
-                                  });
-                                }}
-                              />
-                              <span>gram</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-4 gap-2 text-center text-[10px] bg-black/20 p-2 rounded-lg mt-1 border border-white/5">
-                          <div>
-                            <span className="text-muted block">Kalori</span>
-                            <span className="font-bold text-slate-200">{mealForm.calories} kcal</span>
-                          </div>
-                          <div>
-                            <span className="text-muted block">Protein</span>
-                            <span className="font-bold text-slate-200">{mealForm.protein}g</span>
-                          </div>
-                          <div>
-                            <span className="text-muted block">Karbo</span>
-                            <span className="font-bold text-slate-200">{mealForm.carbs}g</span>
-                          </div>
-                          <div>
-                            <span className="text-muted block">Lemak</span>
-                            <span className="font-bold text-slate-200">{mealForm.fat}g</span>
-                          </div>
-                        </div>
-
-                        {/* Foto Makanan (Opsional) */}
-                        <div className="flex flex-col gap-1.5 mt-1">
-                          <label className="text-[10px] text-secondary">Foto Makanan (Opsional)</label>
-                          {mealImage ? (
-                            <div className="flex items-center gap-3 bg-white/5 border border-white/10 p-2 rounded-xl animate-pop-in">
-                              <img src={mealImage} alt="Preview Makanan" className="w-10 h-10 object-cover rounded-lg border border-white/10" />
-                              <span className="text-[10px] text-muted flex-1 truncate">Foto berhasil diunggah</span>
-                              <button 
-                                type="button" 
-                                onClick={() => setMealImage(null)} 
-                                className="text-rose-400 hover:text-rose-300 text-[10px] font-semibold px-2 py-1 rounded bg-white/5 border border-white/5 hover:border-white/10 transition-colors"
-                              >
-                                Hapus
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 animate-pop-in">
-                              <label className="flex-1 flex items-center justify-center gap-1.5 h-10 border border-dashed border-white/10 hover:border-purple/35 rounded-xl cursor-pointer bg-white/5 hover:bg-white/10 transition-all text-muted hover:text-slate-200">
-                                <Camera className="w-4 h-4 text-secondary" />
-                                <span className="text-xs">Ambil / Unggah Foto Makanan</span>
-                                <input 
-                                  type="file" 
-                                  accept="image/*" 
-                                  className="hidden" 
-                                  onChange={e => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                      if (file.size / 1024 / 1024 >= 2.5) {
-                                        alert('Ukuran foto terlalu besar. Maksimal 2.5 MB.');
-                                        return;
-                                      }
-                                      const reader = new FileReader();
-                                      reader.readAsDataURL(file);
-                                      reader.onload = () => {
-                                        setMealImage(reader.result);
-                                      };
-                                    }
-                                  }}
-                                />
-                              </label>
-                            </div>
-                          )}
-                        </div>
-
-                        <Button 
-                          type="primary" 
-                          htmlType="submit" 
-                          loading={submittingMeal}
-                          className="h-10 text-xs font-semibold mt-1"
-                        >
-                          Catat Makanan
-                        </Button>
-                      </>
-                    )}
-                  </form>
                 </div>
               ) : (
                 <div className="flex flex-col gap-3 animate-pop-in">
@@ -4376,11 +4375,6 @@ export default function Home() {
           {profileError && (
             <div className="bg-danger-glow border border-danger/20 text-rose-400 text-xs p-3 rounded-lg text-center">
               {profileError}
-            </div>
-          )}
-          {profileSuccess && (
-            <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs p-3 rounded-lg text-center font-medium">
-              {profileSuccess}
             </div>
           )}
 

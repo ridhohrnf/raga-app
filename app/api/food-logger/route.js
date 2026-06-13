@@ -86,3 +86,40 @@ export async function DELETE(request) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+export async function PUT(request) {
+  try {
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id, weight_g, calories, protein, carbs, fat } = await request.json();
+
+    if (!id || !weight_g) {
+      return NextResponse.json({ error: 'ID makanan dan berat wajib diisi' }, { status: 400 });
+    }
+
+    const sql = await getDb();
+    const result = await sql`
+      UPDATE logged_meals 
+      SET weight_g = ${weight_g}, 
+          calories = ${calories || 0}, 
+          protein = ${protein || 0}, 
+          carbs = ${carbs || 0}, 
+          fat = ${fat || 0}
+      WHERE id = ${id} AND user_id = ${user.id}
+      RETURNING *
+    `;
+
+    if (result.length === 0) {
+      return NextResponse.json({ error: 'Catatan makanan tidak ditemukan.' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, meal: result[0] });
+  } catch (error) {
+    console.error('Food logger PUT error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+

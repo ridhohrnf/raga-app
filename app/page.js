@@ -21,7 +21,8 @@ import {
   Save,
   Info,
   Utensils,
-  Apple
+  Apple,
+  Minus
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -240,6 +241,8 @@ export default function Home() {
   // Nutrition & Profile States
   const [loggedMeals, setLoggedMeals] = useState([]);
   const [expandedMeals, setExpandedMeals] = useState({});
+  const [editMealWeight, setEditMealWeight] = useState({});
+  const [updatingMealId, setUpdatingMealId] = useState(null);
   const [foodLibrary, setFoodLibrary] = useState([]);
   const [loadingNutrition, setLoadingNutrition] = useState(false);
   const [submittingMeal, setSubmittingMeal] = useState(false);
@@ -548,6 +551,58 @@ export default function Home() {
       console.error(err);
     }
   };
+
+  const handleSaveMealEdit = async (meal) => {
+    const newWeightStr = editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g.toString();
+    const newWeight = parseIndonesianFloatWithDefault(newWeightStr, 0);
+    if (newWeight <= 0) {
+      alert('Berat makanan harus lebih besar dari 0.');
+      return;
+    }
+
+    const originalWeight = parseFloat(meal.weight_g) || 1;
+
+    const newCalories = (parseFloat(meal.calories) / originalWeight) * newWeight;
+    const newProtein = (parseFloat(meal.protein) / originalWeight) * newWeight;
+    const newCarbs = (parseFloat(meal.carbs) / originalWeight) * newWeight;
+    const newFat = (parseFloat(meal.fat) / originalWeight) * newWeight;
+
+    setUpdatingMealId(meal.id);
+    try {
+      const res = await fetch('/api/food-logger', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: meal.id,
+          weight_g: newWeight,
+          calories: Math.round(newCalories * 10) / 10,
+          protein: Math.round(newProtein * 10) / 10,
+          carbs: Math.round(newCarbs * 10) / 10,
+          fat: Math.round(newFat * 10) / 10
+        })
+      });
+
+      if (res.ok) {
+        message.success('Catatan makanan berhasil diperbarui!');
+        setEditMealWeight(prev => {
+          const updated = { ...prev };
+          delete updated[meal.id];
+          return updated;
+        });
+        setExpandedMeals(prev => ({ ...prev, [meal.id]: false }));
+        await fetchLoggedMeals(nutritionDate);
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Gagal memperbarui catatan makanan.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Masalah koneksi.');
+    } finally {
+      setUpdatingMealId(null);
+    }
+  };
+
 
   const handleCreateFoodItem = async (e) => {
     if (e) e.preventDefault();
@@ -3768,11 +3823,12 @@ export default function Home() {
                   setSelectedLibraryFood(null);
                   setSearchFoodTerm('');
                   setFoodActiveSubTab('library');
+                  document.getElementById('new-meal-form')?.scrollIntoView({ behavior: 'smooth' });
                 }}
                 className="h-10 text-xs font-semibold px-4 flex items-center gap-1.5"
                 icon={<Plus className="w-4 h-4" />}
               >
-                Catat Makan
+                Catat Makanan
               </Button>
             </div>
 
@@ -3803,20 +3859,97 @@ export default function Home() {
                               onClick={(e) => { e.stopPropagation(); handleDeleteMealLog(meal.id); }}
                               className="text-muted hover:text-rose-400 p-1 rounded transition-colors shrink-0"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Minus className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
                       </div>
                       
                       {expandedMeals[meal.id] && (
-                        <div className="flex flex-col gap-3 border-t border-white/5 pt-2 mt-1 animate-slide-up">
-                          <div className="flex gap-3.5 text-[10px] text-muted flex-wrap">
-                            <span>Berat: {parseFloat(meal.weight_g)}g</span>
-                            <span>Protein: {parseFloat(meal.protein)}g</span>
-                            <span>Karbo: {parseFloat(meal.carbs)}g</span>
-                            <span>Lemak: {parseFloat(meal.fat)}g</span>
+                        <div className="flex flex-col gap-3 border-t border-white/5 pt-2 mt-1 animate-slide-up" onClick={e => e.stopPropagation()}>
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] text-secondary">Ubah Berat (gram)</label>
+                            <div className="flex gap-2 items-center">
+                              <div className="input-wrapper-suffix h-9 flex-1">
+                                <input 
+                                  type="text" 
+                                  inputMode="decimal"
+                                  placeholder="Berat..."
+                                  value={
+                                    editMealWeight[meal.id] !== undefined 
+                                      ? editMealWeight[meal.id] 
+                                      : parseFloat(meal.weight_g)
+                                  }
+                                  onChange={e => {
+                                    const valStr = e.target.value;
+                                    setEditMealWeight(prev => ({ ...prev, [meal.id]: valStr }));
+                                  }}
+                                />
+                                <span>gram</span>
+                              </div>
+                              <Button
+                                type="primary"
+                                size="small"
+                                loading={updatingMealId === meal.id}
+                                onClick={() => handleSaveMealEdit(meal)}
+                                className="h-9 text-[11px] px-3 font-semibold rounded-lg"
+                              >
+                                Simpan
+                              </Button>
+                            </div>
                           </div>
+
+                          <div className="grid grid-cols-4 gap-1.5 text-center text-[9.5px] bg-black/30 p-2 rounded-lg border border-white/5">
+                            <div>
+                              <span className="text-muted block text-[8px] uppercase font-semibold">Kalori</span>
+                              <span className="font-bold text-slate-200">
+                                {Math.round(
+                                  (parseFloat(meal.calories) / (parseFloat(meal.weight_g) || 1)) * 
+                                  parseIndonesianFloatWithDefault(
+                                    editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
+                                    0
+                                  )
+                                )} kcal
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted block text-[8px] uppercase font-semibold">Protein</span>
+                              <span className="font-bold text-slate-200">
+                                {(
+                                  ((parseFloat(meal.protein) / (parseFloat(meal.weight_g) || 1)) * 
+                                  parseIndonesianFloatWithDefault(
+                                    editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
+                                    0
+                                  ))
+                                ).toFixed(1)}g
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted block text-[8px] uppercase font-semibold">Karbo</span>
+                              <span className="font-bold text-slate-200">
+                                {(
+                                  ((parseFloat(meal.carbs) / (parseFloat(meal.weight_g) || 1)) * 
+                                  parseIndonesianFloatWithDefault(
+                                    editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
+                                    0
+                                  ))
+                                ).toFixed(1)}g
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted block text-[8px] uppercase font-semibold">Lemak</span>
+                              <span className="font-bold text-slate-200">
+                                {(
+                                  ((parseFloat(meal.fat) / (parseFloat(meal.weight_g) || 1)) * 
+                                  parseIndonesianFloatWithDefault(
+                                    editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
+                                    0
+                                  ))
+                                ).toFixed(1)}g
+                              </span>
+                            </div>
+                          </div>
+
                           {meal.image_data && (
                             <div className="w-full rounded-xl overflow-hidden border border-white/10 mt-1">
                               <img 
@@ -3837,7 +3970,7 @@ export default function Home() {
             </div>
 
             {/* Food logger form container */}
-            <div className="glass-card flex flex-col gap-4">
+            <div id="new-meal-form" className="glass-card flex flex-col gap-4">
               <h3 className="text-sm font-semibold text-primary m-0 border-b border-white/5 pb-2">Catat Makanan Baru</h3>
 
               {/* Segmented Control / Sub Tabs */}

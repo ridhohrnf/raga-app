@@ -145,6 +145,18 @@ const getExerciseAnatomyInfo = (name, category) => {
   return { target: 'Umum', detail: 'Latihan Fungsional', modulInfo: 'Latihan olahraga teratur.' };
 };
 
+const parseIndonesianFloat = (val) => {
+  if (val === undefined || val === null || val === '') return NaN;
+  const cleanVal = val.toString().replace(/,/g, '.');
+  const parsed = parseFloat(cleanVal);
+  return isNaN(parsed) ? NaN : parsed;
+};
+
+const parseIndonesianFloatWithDefault = (val, def = 0) => {
+  const parsed = parseIndonesianFloat(val);
+  return isNaN(parsed) ? def : parsed;
+};
+
 export default function Home() {
   // Authentication & Global State
   const [user, setUser] = useState(null);
@@ -399,8 +411,9 @@ export default function Home() {
       targetCalories = tdee + 500;
     }
 
-    const targetProtein = Math.round(weight * 2.0); 
-    const targetFat = Math.round(weight * 1.0);     
+    const targetProtein = Math.round(weight * 1.8); 
+    const fatPct = user.fitness_goal === 'cutting' ? 0.20 : 0.25;
+    const targetFat = Math.round((targetCalories * fatPct) / 9);     
     
     const proteinCalories = targetProtein * 4;
     const fatCalories = targetFat * 9;
@@ -538,9 +551,29 @@ export default function Home() {
 
   const handleCreateFoodItem = async (e) => {
     if (e) e.preventDefault();
-    if (!foodForm.name || !foodForm.calories || !foodForm.protein || !foodForm.carbs || !foodForm.fat || !foodForm.servingG) {
-      alert('Semua kolom pustaka makanan wajib diisi.');
+    const name = foodForm.name?.trim();
+    const servingG = parseIndonesianFloat(foodForm.servingG);
+
+    if (!name || isNaN(servingG) || servingG <= 0) {
+      alert('Nama makanan dan takaran saji wajib diisi.');
       return;
+    }
+
+    let caloriesVal = parseIndonesianFloat(foodForm.calories);
+    let proteinVal = parseIndonesianFloatWithDefault(foodForm.protein, 0);
+    let carbsVal = parseIndonesianFloatWithDefault(foodForm.carbs, 0);
+    let fatVal = parseIndonesianFloatWithDefault(foodForm.fat, 0);
+
+    if (isNaN(caloriesVal)) {
+      const hasProtein = foodForm.protein !== '' && foodForm.protein !== null && !isNaN(parseIndonesianFloat(foodForm.protein));
+      const hasCarbs = foodForm.carbs !== '' && foodForm.carbs !== null && !isNaN(parseIndonesianFloat(foodForm.carbs));
+      const hasFat = foodForm.fat !== '' && foodForm.fat !== null && !isNaN(parseIndonesianFloat(foodForm.fat));
+
+      if (!hasProtein && !hasCarbs && !hasFat) {
+        alert('Masukkan total Kalori ATAU setidaknya salah satu kandungan makro (Protein/Karbo/Lemak) agar Kalori bisa dihitung otomatis.');
+        return;
+      }
+      caloriesVal = Math.round((proteinVal * 4) + (carbsVal * 4) + (fatVal * 9));
     }
 
     setSubmittingFoodItem(true);
@@ -549,12 +582,12 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: foodForm.name,
-          calories: parseFloat(foodForm.calories),
-          protein: parseFloat(foodForm.protein),
-          carbs: parseFloat(foodForm.carbs),
-          fat: parseFloat(foodForm.fat),
-          serving_g: parseFloat(foodForm.servingG)
+          name: name,
+          calories: caloriesVal,
+          protein: proteinVal,
+          carbs: carbsVal,
+          fat: fatVal,
+          serving_g: servingG
         })
       });
 
@@ -576,20 +609,40 @@ export default function Home() {
 
   const handleLogCustomFoodDirectly = async (e) => {
     if (e) e.preventDefault();
-    if (!foodForm.name || !foodForm.servingG) {
+    const name = foodForm.name?.trim();
+    const servingG = parseIndonesianFloat(foodForm.servingG);
+
+    if (!name || isNaN(servingG) || servingG <= 0) {
       alert('Nama makanan dan berat/takaran saji wajib diisi.');
       return;
+    }
+
+    let caloriesVal = parseIndonesianFloat(foodForm.calories);
+    let proteinVal = parseIndonesianFloatWithDefault(foodForm.protein, 0);
+    let carbsVal = parseIndonesianFloatWithDefault(foodForm.carbs, 0);
+    let fatVal = parseIndonesianFloatWithDefault(foodForm.fat, 0);
+
+    if (isNaN(caloriesVal)) {
+      const hasProtein = foodForm.protein !== '' && foodForm.protein !== null && !isNaN(parseIndonesianFloat(foodForm.protein));
+      const hasCarbs = foodForm.carbs !== '' && foodForm.carbs !== null && !isNaN(parseIndonesianFloat(foodForm.carbs));
+      const hasFat = foodForm.fat !== '' && foodForm.fat !== null && !isNaN(parseIndonesianFloat(foodForm.fat));
+
+      if (!hasProtein && !hasCarbs && !hasFat) {
+        alert('Masukkan total Kalori ATAU setidaknya salah satu kandungan makro (Protein/Karbo/Lemak) agar Kalori bisa dihitung otomatis.');
+        return;
+      }
+      caloriesVal = Math.round((proteinVal * 4) + (carbsVal * 4) + (fatVal * 9));
     }
 
     setSubmittingMeal(true);
     try {
       const payload = {
-        food_name: foodForm.name,
-        weight_g: parseFloat(foodForm.servingG),
-        calories: parseFloat(foodForm.calories || 0),
-        protein: parseFloat(foodForm.protein || 0),
-        carbs: parseFloat(foodForm.carbs || 0),
-        fat: parseFloat(foodForm.fat || 0),
+        food_name: name,
+        weight_g: servingG,
+        calories: caloriesVal,
+        protein: proteinVal,
+        carbs: carbsVal,
+        fat: fatVal,
         date: nutritionDate,
         image_data: mealImage
       };
@@ -613,6 +666,81 @@ export default function Home() {
       console.error(err);
       alert('Gagal menghubungi server.');
     } finally {
+      setSubmittingMeal(false);
+    }
+  };
+
+  const handleLogAndCreateFoodItem = async (e) => {
+    if (e) e.preventDefault();
+    const name = foodForm.name?.trim();
+    const servingG = parseIndonesianFloat(foodForm.servingG);
+    const caloriesVal = parseIndonesianFloat(foodForm.calories);
+    const proteinVal = parseIndonesianFloat(foodForm.protein);
+    const carbsVal = parseIndonesianFloat(foodForm.carbs);
+    const fatVal = parseIndonesianFloat(foodForm.fat);
+
+    // For "Catat & Tambahkan ke Pustaka", ALL columns must be fully filled
+    if (!name || isNaN(servingG) || isNaN(caloriesVal) || isNaN(proteinVal) || isNaN(carbsVal) || isNaN(fatVal)) {
+      alert('Semua kolom (Nama, Takaran, Kalori, Protein, Karbo, Lemak) wajib diisi lengkap untuk pilihan ini.');
+      return;
+    }
+
+    setSubmittingFoodItem(true);
+    setSubmittingMeal(true);
+    try {
+      // 1. Add to Food Library
+      const libRes = await fetch('/api/food-library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name,
+          calories: caloriesVal,
+          protein: proteinVal,
+          carbs: carbsVal,
+          fat: fatVal,
+          serving_g: servingG
+        })
+      });
+
+      if (!libRes.ok) {
+        const err = await libRes.json();
+        alert(err.error || 'Gagal menambahkan ke pustaka.');
+        return;
+      }
+
+      // 2. Log to Diary
+      const payload = {
+        food_name: name,
+        weight_g: servingG,
+        calories: caloriesVal,
+        protein: proteinVal,
+        carbs: carbsVal,
+        fat: fatVal,
+        date: nutritionDate,
+        image_data: mealImage
+      };
+
+      const logRes = await fetch('/api/food-logger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (logRes.ok) {
+        setFoodForm({ name: '', calories: '', protein: '', carbs: '', fat: '', servingG: 100 });
+        setMealImage(null);
+        await fetchFoodLibrary();
+        await fetchLoggedMeals(nutritionDate);
+        alert('Makanan kustom berhasil dicatat dan disimpan ke pustaka Anda.');
+      } else {
+        const err = await logRes.json();
+        alert(err.error || 'Gagal mencatat makanan.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Koneksi bermasalah.');
+    } finally {
+      setSubmittingFoodItem(false);
       setSubmittingMeal(false);
     }
   };
@@ -745,8 +873,9 @@ export default function Home() {
 
       if (user && user.weight) {
         const weight = parseFloat(user.weight);
-        protein = Math.round(weight * 2.0);
-        fat = Math.round(weight * 1.0);
+        protein = Math.round(weight * 1.8);
+        const fatPct = user.fitness_goal === 'cutting' ? 0.20 : 0.25;
+        fat = Math.round((targetCalories * fatPct) / 9);
         const remaining = Math.max(0, targetCalories - (protein * 4) - (fat * 9));
         carbs = Math.round(remaining / 4);
       } else {
@@ -3801,18 +3930,19 @@ export default function Home() {
                                   <label className="text-[10px] text-secondary">Berat Makanan (gram)</label>
                                   <div className="input-wrapper-suffix h-9">
                                     <input 
-                                      type="number" 
-                                      min="1"
+                                      type="text" 
+                                      inputMode="decimal"
                                       value={mealForm.weightG}
                                       onChange={e => {
-                                        const val = parseFloat(e.target.value) || 0;
+                                        const valStr = e.target.value;
+                                        const val = parseIndonesianFloatWithDefault(valStr, 0);
                                         setMealForm({
                                           ...mealForm,
-                                          weightG: val,
-                                          calories: Math.round(parseFloat(item.calories) * (val / parseFloat(item.serving_g || 100))),
-                                          protein: Math.round(parseFloat(item.protein) * (val / parseFloat(item.serving_g || 100)) * 10) / 10,
-                                          carbs: Math.round(parseFloat(item.carbs) * (val / parseFloat(item.serving_g || 100)) * 10) / 10,
-                                          fat: Math.round(parseFloat(item.fat) * (val / parseFloat(item.serving_g || 100)) * 10) / 10
+                                          weightG: valStr,
+                                          calories: Math.round(parseIndonesianFloatWithDefault(item.calories, 0) * (val / parseIndonesianFloatWithDefault(item.serving_g || 100, 100))),
+                                          protein: Math.round(parseIndonesianFloatWithDefault(item.protein, 0) * (val / parseIndonesianFloatWithDefault(item.serving_g || 100, 100)) * 10) / 10,
+                                          carbs: Math.round(parseIndonesianFloatWithDefault(item.carbs, 0) * (val / parseIndonesianFloatWithDefault(item.serving_g || 100, 100)) * 10) / 10,
+                                          fat: Math.round(parseIndonesianFloatWithDefault(item.fat, 0) * (val / parseIndonesianFloatWithDefault(item.serving_g || 100, 100)) * 10) / 10
                                         });
                                       }}
                                     />
@@ -3918,7 +4048,7 @@ export default function Home() {
                       <Input 
                         placeholder="Contoh: 35 atau 100"
                         value={foodForm.servingG}
-                        type="number"
+                        inputMode="decimal"
                         onChange={e => setFoodForm({ ...foodForm, servingG: e.target.value })}
                         className="h-10 text-xs bg-white/5 border-white/10"
                       />
@@ -3928,7 +4058,7 @@ export default function Home() {
                       <Input 
                         placeholder="Contoh: 140"
                         value={foodForm.calories}
-                        type="number"
+                        inputMode="decimal"
                         onChange={e => setFoodForm({ ...foodForm, calories: e.target.value })}
                         className="h-10 text-xs bg-white/5 border-white/10"
                       />
@@ -3941,7 +4071,7 @@ export default function Home() {
                       <Input 
                         placeholder="Contoh: 28"
                         value={foodForm.protein}
-                        type="number"
+                        inputMode="decimal"
                         onChange={e => setFoodForm({ ...foodForm, protein: e.target.value })}
                         className="h-10 text-xs bg-white/5 border-white/10"
                       />
@@ -3951,7 +4081,7 @@ export default function Home() {
                       <Input 
                         placeholder="Contoh: 15"
                         value={foodForm.carbs}
-                        type="number"
+                        inputMode="decimal"
                         onChange={e => setFoodForm({ ...foodForm, carbs: e.target.value })}
                         className="h-10 text-xs bg-white/5 border-white/10"
                       />
@@ -3961,7 +4091,7 @@ export default function Home() {
                       <Input 
                         placeholder="Contoh: 10"
                         value={foodForm.fat}
-                        type="number"
+                        inputMode="decimal"
                         onChange={e => setFoodForm({ ...foodForm, fat: e.target.value })}
                         className="h-10 text-xs bg-white/5 border-white/10"
                       />
@@ -4019,15 +4149,15 @@ export default function Home() {
                       loading={submittingMeal}
                       className="flex-1 h-11 text-xs font-semibold"
                     >
-                      Catat Makanan
+                      Catat
                     </Button>
                     <Button 
                       type="primary" 
-                      onClick={handleCreateFoodItem}
-                      loading={submittingFoodItem}
+                      onClick={handleLogAndCreateFoodItem}
+                      loading={submittingFoodItem || submittingMeal}
                       className="flex-1 h-11 text-xs font-semibold"
                     >
-                      Tambah ke Pustaka
+                      Catat & Tambahkan ke Pustaka
                     </Button>
                   </div>
                 </div>

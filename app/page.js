@@ -515,8 +515,8 @@ export default function Home() {
 
   const handleAddMealLog = async (e) => {
     if (e) e.preventDefault();
-    if (!mealForm.foodName || !mealForm.weightG) {
-      message.warning('Nama makanan dan berat wajib diisi.');
+    if (!mealForm.foodName) {
+      message.warning('Nama makanan wajib diisi.');
       return;
     }
 
@@ -524,7 +524,7 @@ export default function Home() {
     try {
       const payload = {
         food_name: mealForm.foodName,
-        weight_g: parseFloat(mealForm.weightG),
+        weight_g: mealForm.weightG ? parseFloat(mealForm.weightG) : 0,
         calories: parseFloat(mealForm.calories || 0),
         protein: parseFloat(mealForm.protein || 0),
         carbs: parseFloat(mealForm.carbs || 0),
@@ -594,17 +594,17 @@ export default function Home() {
   const handleSaveMealEdit = async (meal) => {
     const newWeightStr = editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g.toString();
     const newWeight = parseIndonesianFloatWithDefault(newWeightStr, 0);
-    if (newWeight <= 0) {
-      message.warning('Berat makanan harus lebih besar dari 0.');
+    if (newWeight < 0) {
+      message.warning('Berat makanan tidak boleh negatif.');
       return;
     }
 
     const originalWeight = parseFloat(meal.weight_g) || 1;
 
-    const newCalories = (parseFloat(meal.calories) / originalWeight) * newWeight;
-    const newProtein = (parseFloat(meal.protein) / originalWeight) * newWeight;
-    const newCarbs = (parseFloat(meal.carbs) / originalWeight) * newWeight;
-    const newFat = (parseFloat(meal.fat) / originalWeight) * newWeight;
+    const newCalories = newWeight > 0 ? (parseFloat(meal.calories) / originalWeight) * newWeight : parseFloat(meal.calories);
+    const newProtein = newWeight > 0 ? (parseFloat(meal.protein) / originalWeight) * newWeight : parseFloat(meal.protein);
+    const newCarbs = newWeight > 0 ? (parseFloat(meal.carbs) / originalWeight) * newWeight : parseFloat(meal.carbs);
+    const newFat = newWeight > 0 ? (parseFloat(meal.fat) / originalWeight) * newWeight : parseFloat(meal.fat);
 
     const newMealTime = editMealTime[meal.id] !== undefined ? editMealTime[meal.id] : (meal.meal_time || 'Camilan');
 
@@ -659,10 +659,14 @@ export default function Home() {
   const handleCreateFoodItem = async (e) => {
     if (e) e.preventDefault();
     const name = foodForm.name?.trim();
-    const servingG = parseIndonesianFloat(foodForm.servingG);
+    const servingG = foodForm.servingG ? parseIndonesianFloat(foodForm.servingG) : 0;
 
-    if (!name || isNaN(servingG) || servingG <= 0) {
-      message.warning('Nama makanan dan takaran saji wajib diisi.');
+    if (!name) {
+      message.warning('Nama makanan wajib diisi.');
+      return;
+    }
+    if (isNaN(servingG) || servingG < 0) {
+      message.warning('Takaran saji harus berupa angka valid.');
       return;
     }
 
@@ -717,10 +721,14 @@ export default function Home() {
   const handleLogCustomFoodDirectly = async (e) => {
     if (e) e.preventDefault();
     const name = foodForm.name?.trim();
-    const servingG = parseIndonesianFloat(foodForm.servingG);
+    const servingG = foodForm.servingG ? parseIndonesianFloat(foodForm.servingG) : 0;
 
-    if (!name || isNaN(servingG) || servingG <= 0) {
-      message.warning('Nama makanan dan berat/takaran saji wajib diisi.');
+    if (!name) {
+      message.warning('Nama makanan wajib diisi.');
+      return;
+    }
+    if (isNaN(servingG) || servingG < 0) {
+      message.warning('Berat makanan harus berupa angka valid.');
       return;
     }
 
@@ -762,9 +770,14 @@ export default function Home() {
       });
 
       if (res.ok) {
+        const data = await res.json();
         setFoodForm({ name: '', calories: '', protein: '', carbs: '', fat: '', servingG: 100 });
         setMealImage(null);
-        await fetchLoggedMeals(nutritionDate);
+        if (data.success && data.meal) {
+          setLoggedMeals(prev => [data.meal, ...prev]);
+        } else {
+          await fetchLoggedMeals(nutritionDate);
+        }
         message.success('Makanan kustom berhasil dicatat ke diary harian Anda.');
       } else {
         const err = await res.json();
@@ -781,16 +794,31 @@ export default function Home() {
   const handleLogAndCreateFoodItem = async (e) => {
     if (e) e.preventDefault();
     const name = foodForm.name?.trim();
-    const servingG = parseIndonesianFloat(foodForm.servingG);
-    const caloriesVal = parseIndonesianFloat(foodForm.calories);
-    const proteinVal = parseIndonesianFloat(foodForm.protein);
-    const carbsVal = parseIndonesianFloat(foodForm.carbs);
-    const fatVal = parseIndonesianFloat(foodForm.fat);
+    const servingG = foodForm.servingG ? parseIndonesianFloat(foodForm.servingG) : 0;
+    let caloriesVal = parseIndonesianFloat(foodForm.calories);
+    const proteinVal = parseIndonesianFloatWithDefault(foodForm.protein, 0);
+    const carbsVal = parseIndonesianFloatWithDefault(foodForm.carbs, 0);
+    const fatVal = parseIndonesianFloatWithDefault(foodForm.fat, 0);
 
-    // For "Catat & Tambahkan ke Pustaka", ALL columns must be fully filled
-    if (!name || isNaN(servingG) || isNaN(caloriesVal) || isNaN(proteinVal) || isNaN(carbsVal) || isNaN(fatVal)) {
-      message.warning('Semua kolom (Nama, Takaran, Kalori, Protein, Karbo, Lemak) wajib diisi lengkap untuk pilihan ini.');
+    if (!name) {
+      message.warning('Nama makanan wajib diisi.');
       return;
+    }
+    if (isNaN(servingG) || servingG < 0) {
+      message.warning('Takaran saji harus berupa angka valid.');
+      return;
+    }
+
+    if (isNaN(caloriesVal)) {
+      const hasProtein = foodForm.protein !== '' && foodForm.protein !== null && !isNaN(parseIndonesianFloat(foodForm.protein));
+      const hasCarbs = foodForm.carbs !== '' && foodForm.carbs !== null && !isNaN(parseIndonesianFloat(foodForm.carbs));
+      const hasFat = foodForm.fat !== '' && foodForm.fat !== null && !isNaN(parseIndonesianFloat(foodForm.fat));
+
+      if (!hasProtein && !hasCarbs && !hasFat) {
+        message.warning('Masukkan total Kalori atau makronutrisi agar Kalori bisa dihitung otomatis.');
+        return;
+      }
+      caloriesVal = Math.round((proteinVal * 4) + (carbsVal * 4) + (fatVal * 9));
     }
 
     setSubmittingFoodItem(true);
@@ -862,7 +890,7 @@ export default function Home() {
       protein: item.protein,
       carbs: item.carbs,
       fat: item.fat,
-      servingG: item.serving_g || 100
+      servingG: item.serving_g !== undefined && item.serving_g !== null ? item.serving_g : ''
     });
     setShowEditFoodModal(true);
   };
@@ -886,7 +914,7 @@ export default function Home() {
           protein: parseFloat(editFoodForm.protein || 0),
           carbs: parseFloat(editFoodForm.carbs || 0),
           fat: parseFloat(editFoodForm.fat || 0),
-          serving_g: parseFloat(editFoodForm.servingG || 100)
+          serving_g: editFoodForm.servingG ? parseFloat(editFoodForm.servingG) : 0
         })
       });
 
@@ -1811,15 +1839,29 @@ export default function Home() {
   };
 
   const updateExercisesList = () => {
-    if (workouts.length === 0) return;
     const dbExercises = [];
-    workouts.forEach(w => {
-      w.exercises?.forEach(ex => {
-        if (!dbExercises.some(item => item.name.toLowerCase() === ex.name.toLowerCase())) {
-          dbExercises.push({ name: ex.name, category: ex.category || 'General' });
-        }
+    
+    // 1. Extract from logged workouts
+    if (workouts && workouts.length > 0) {
+      workouts.forEach(w => {
+        w.exercises?.forEach(ex => {
+          if (!dbExercises.some(item => item.name.toLowerCase() === ex.name.toLowerCase())) {
+            dbExercises.push({ name: ex.name, category: ex.category || 'General' });
+          }
+        });
       });
-    });
+    }
+
+    // 2. Extract from routine templates (programs)
+    if (templates && templates.length > 0) {
+      templates.forEach(t => {
+        t.exercises?.forEach(ex => {
+          if (!dbExercises.some(item => item.name.toLowerCase() === ex.name.toLowerCase())) {
+            dbExercises.push({ name: ex.name, category: ex.category || 'General' });
+          }
+        });
+      });
+    }
     
     // Merge database exercises with default ones
     setExercisesList(prev => {
@@ -1835,7 +1877,7 @@ export default function Home() {
 
   useEffect(() => {
     updateExercisesList();
-  }, [workouts]);
+  }, [workouts, templates]);
 
   // Fetch specific exercise data for detailed charting
   const viewExerciseDetail = async (exerciseName) => {

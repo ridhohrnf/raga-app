@@ -52,6 +52,14 @@ html {
   -webkit-tap-highlight-color: transparent;
 }
 
+button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  outline: none;
+  padding: 0;
+}
+
 body {
   background-color: var(--bg-base);
   color: var(--text-primary);
@@ -519,6 +527,8 @@ label {
    ========================================== */
 
 /* Flexbox Utilities */
+.block { display: block; }
+.inline-block { display: inline-block; }
 .flex { display: flex; }
 .inline-flex { display: inline-flex; }
 .flex-col { flex-direction: column; }
@@ -538,6 +548,7 @@ label {
 .grid { display: grid; }
 .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 /* Custom columns for sets editor table: grid-cols-[36px_1.2fr_1.2fr_1fr_50px] */
 .grid-cols-\[36px_1\.2fr_1\.2fr_1fr_50px\] {

@@ -33,7 +33,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { food_name, weight_g, calories, protein, carbs, fat, date, image_data } = await request.json();
+    const { food_name, weight_g, calories, protein, carbs, fat, date, image_data, meal_time } = await request.json();
 
     if (!food_name || !weight_g) {
       return NextResponse.json({ error: 'Nama makanan dan berat wajib diisi' }, { status: 400 });
@@ -43,8 +43,8 @@ export async function POST(request) {
 
     const sql = await getDb();
     const result = await sql`
-      INSERT INTO logged_meals (user_id, food_name, weight_g, calories, protein, carbs, fat, logged_date, image_data)
-      VALUES (${user.id}, ${food_name.trim()}, ${weight_g}, ${calories || 0}, ${protein || 0}, ${carbs || 0}, ${fat || 0}, ${dateStr}, ${image_data || null})
+      INSERT INTO logged_meals (user_id, food_name, weight_g, calories, protein, carbs, fat, logged_date, image_data, meal_time)
+      VALUES (${user.id}, ${food_name.trim()}, ${weight_g}, ${calories || 0}, ${protein || 0}, ${carbs || 0}, ${fat || 0}, ${dateStr}, ${image_data || null}, ${meal_time || 'Camilan'})
       RETURNING *
     `;
 

@@ -22,7 +22,10 @@ import {
   Info,
   Utensils,
   Apple,
-  Minus
+  Minus,
+  Coffee,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -43,7 +46,7 @@ import {
   ReferenceLine
 } from 'recharts';
 import confetti from 'canvas-confetti';
-import { ConfigProvider, theme, DatePicker, Select, Button, Input, InputNumber, Upload, Modal, message } from 'antd';
+import { ConfigProvider, theme, DatePicker, Select, Button, Input, InputNumber, Upload, Modal, message, Segmented } from 'antd';
 import dayjs from 'dayjs';
 import 'dayjs/locale/id'; // Indonesian locale for Day.js
 
@@ -239,7 +242,16 @@ export default function Home() {
   const [submittingActivity, setSubmittingActivity] = useState(false);
 
   // Nutrition & Profile States
+  const getDefaultMealTime = () => {
+    const hour = new Date().getHours();
+    if (hour >= 4 && hour < 11) return 'Makan Pagi';
+    if (hour >= 11 && hour < 17) return 'Makan Siang';
+    if (hour >= 17 && hour < 22) return 'Makan Malam';
+    return 'Camilan';
+  };
+
   const [loggedMeals, setLoggedMeals] = useState([]);
+  const [selectedMealTime, setSelectedMealTime] = useState(getDefaultMealTime());
   const [expandedMeals, setExpandedMeals] = useState({});
   const [editMealWeight, setEditMealWeight] = useState({});
   const [updatingMealId, setUpdatingMealId] = useState(null);
@@ -512,7 +524,8 @@ export default function Home() {
         carbs: parseFloat(mealForm.carbs || 0),
         fat: parseFloat(mealForm.fat || 0),
         date: nutritionDate,
-        image_data: mealImage
+        image_data: mealImage,
+        meal_time: selectedMealTime
       };
 
       const res = await fetch('/api/food-logger', {
@@ -540,18 +553,27 @@ export default function Home() {
   };
 
   const handleDeleteMealLog = async (id) => {
-    if (!confirm('Hapus catatan makanan ini?')) return;
-    try {
-      const res = await fetch(`/api/food-logger?id=${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        message.success('Catatan makanan berhasil dihapus.');
-        await fetchLoggedMeals(nutritionDate);
-      } else {
-        message.error('Gagal menghapus catatan makanan.');
+    Modal.confirm({
+      title: 'Hapus Catatan Makanan?',
+      content: 'Apakah Anda yakin ingin menghapus catatan makanan ini dari diary harian?',
+      okText: 'Hapus',
+      cancelText: 'Batal',
+      okType: 'danger',
+      centered: true,
+      onOk: async () => {
+        try {
+          const res = await fetch(`/api/food-logger?id=${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            message.success('Catatan makanan berhasil dihapus.');
+            await fetchLoggedMeals(nutritionDate);
+          } else {
+            message.error('Gagal menghapus catatan makanan.');
+          }
+        } catch (err) {
+          console.error(err);
+        }
       }
-    } catch (err) {
-      console.error(err);
-    }
+    });
   };
 
   const handleSaveMealEdit = async (meal) => {
@@ -701,7 +723,8 @@ export default function Home() {
         carbs: carbsVal,
         fat: fatVal,
         date: nutritionDate,
-        image_data: mealImage
+        image_data: mealImage,
+        meal_time: selectedMealTime
       };
 
       const res = await fetch('/api/food-logger', {
@@ -774,7 +797,8 @@ export default function Home() {
         carbs: carbsVal,
         fat: fatVal,
         date: nutritionDate,
-        image_data: mealImage
+        image_data: mealImage,
+        meal_time: selectedMealTime
       };
 
       const logRes = await fetch('/api/food-logger', {
@@ -803,19 +827,28 @@ export default function Home() {
   };
 
   const handleDeleteFoodItem = async (id) => {
-    if (!confirm('Hapus makanan ini dari pustaka Anda?')) return;
-    try {
-      const res = await fetch(`/api/food-library?id=${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        message.success('Makanan berhasil dihapus dari pustaka.');
-        await fetchFoodLibrary();
-      } else {
-        const err = await res.json();
-        message.error(err.error || 'Gagal menghapus makanan dari pustaka.');
+    Modal.confirm({
+      title: 'Hapus Makanan dari Pustaka?',
+      content: 'Apakah Anda yakin ingin menghapus makanan ini dari pustaka kustom Anda?',
+      okText: 'Hapus',
+      cancelText: 'Batal',
+      okType: 'danger',
+      centered: true,
+      onOk: async () => {
+        try {
+          const res = await fetch(`/api/food-library?id=${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            message.success('Makanan berhasil dihapus dari pustaka.');
+            await fetchFoodLibrary();
+          } else {
+            const err = await res.json();
+            message.error(err.error || 'Gagal menghapus makanan dari pustaka.');
+          }
+        } catch (err) {
+          console.error(err);
+        }
       }
-    } catch (err) {
-      console.error(err);
-    }
+    });
   };
 
   useEffect(() => {
@@ -971,28 +1004,36 @@ export default function Home() {
   };
 
   const handleResetDailyTarget = async () => {
-    if (!confirm('Kembalikan ke target default profil?')) return;
-    
-    setSubmittingDailyTarget(true);
-    try {
-      const res = await fetch(`/api/daily-target?date=${nutritionDate}`, {
-        method: 'DELETE'
-      });
+    Modal.confirm({
+      title: 'Kembalikan Target ke Default?',
+      content: 'Apakah Anda yakin ingin mengembalikan target harian ke target default profil?',
+      okText: 'Ya, Reset',
+      cancelText: 'Batal',
+      okType: 'danger',
+      centered: true,
+      onOk: async () => {
+        setSubmittingDailyTarget(true);
+        try {
+          const res = await fetch(`/api/daily-target?date=${nutritionDate}`, {
+            method: 'DELETE'
+          });
 
-      if (res.ok) {
-        message.success('Target harian berhasil direset ke default.');
-        await fetchDailyTarget(nutritionDate);
-        setShowDailyTargetModal(false);
-      } else {
-        const err = await res.json();
-        message.error(err.error || 'Gagal mereset target harian.');
+          if (res.ok) {
+            message.success('Target harian berhasil direset ke default.');
+            await fetchDailyTarget(nutritionDate);
+            setShowDailyTargetModal(false);
+          } else {
+            const err = await res.json();
+            message.error(err.error || 'Gagal mereset target harian.');
+          }
+        } catch (err) {
+          console.error(err);
+          message.error('Gagal menghubungi server.');
+        } finally {
+          setSubmittingDailyTarget(false);
+        }
       }
-    } catch (err) {
-      console.error(err);
-      message.error('Gagal menghubungi server.');
-    } finally {
-      setSubmittingDailyTarget(false);
-    }
+    });
   };
 
   const fetchTemplates = async () => {
@@ -1010,11 +1051,11 @@ export default function Home() {
   const handleSaveTemplate = async (e) => {
     if (e) e.preventDefault();
     if (!templateForm.name || !templateForm.name.trim()) {
-      alert('Nama rencana wajib diisi.');
+      message.warning('Nama rencana wajib diisi.');
       return;
     }
     if (!templateForm.exercises || templateForm.exercises.length === 0) {
-      alert('Pilih minimal satu gerakan untuk rencana ini.');
+      message.warning('Pilih minimal satu gerakan untuk rencana ini.');
       return;
     }
 
@@ -1031,36 +1072,47 @@ export default function Home() {
       });
 
       if (res.ok) {
+        message.success('Rencana latihan berhasil disimpan!');
         await fetchTemplates();
         setShowTemplateModal(false);
         setTemplateForm({ id: null, name: '', exercises: [] });
       } else {
         const err = await res.json();
-        alert(err.error || 'Gagal menyimpan rencana latihan.');
+        message.error(err.error || 'Gagal menyimpan rencana latihan.');
       }
     } catch (err) {
       console.error(err);
-      alert('Gagal menghubungi server.');
+      message.error('Gagal menghubungi server.');
     } finally {
       setSubmittingTemplate(false);
     }
   };
 
   const handleDeleteTemplate = async (id) => {
-    if (!confirm('Hapus rencana latihan ini?')) return;
-    try {
-      const res = await fetch(`/api/templates?id=${id}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        await fetchTemplates();
-      } else {
-        const err = await res.json();
-        alert(err.error || 'Gagal menghapus rencana latihan.');
+    Modal.confirm({
+      title: 'Hapus Rencana Latihan?',
+      content: 'Apakah Anda yakin ingin menghapus rencana latihan ini secara permanen?',
+      okText: 'Hapus',
+      cancelText: 'Batal',
+      okType: 'danger',
+      centered: true,
+      onOk: async () => {
+        try {
+          const res = await fetch(`/api/templates?id=${id}`, {
+            method: 'DELETE'
+          });
+          if (res.ok) {
+            message.success('Rencana latihan berhasil dihapus.');
+            await fetchTemplates();
+          } else {
+            const err = await res.json();
+            message.error(err.error || 'Gagal menghapus rencana latihan.');
+          }
+        } catch (e) {
+          console.error('Delete template error:', e);
+        }
       }
-    } catch (e) {
-      console.error('Delete template error:', e);
-    }
+    });
   };
 
   const startWorkoutFromTemplate = async (template) => {
@@ -1437,30 +1489,41 @@ export default function Home() {
       });
       if (res.ok) {
         setActivityForm({ steps: null, calories: null });
+        message.success('Aktivitas berhasil disimpan!');
         await fetchActivities();
       } else {
-        alert('Gagal menyimpan aktivitas.');
+        message.error('Gagal menyimpan aktivitas.');
       }
     } catch (err) {
       console.error(err);
-      alert('Masalah koneksi.');
+      message.error('Masalah koneksi.');
     } finally {
       setSubmittingActivity(false);
     }
   };
 
   const handleDeleteActivity = async (id) => {
-    if (!confirm('Hapus aktivitas ini?')) return;
-    try {
-      const res = await fetch(`/api/activities?id=${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        await fetchActivities();
-      } else {
-        alert('Gagal menghapus aktivitas.');
+    Modal.confirm({
+      title: 'Hapus Aktivitas Harian?',
+      content: 'Apakah Anda yakin ingin menghapus data langkah dan kalori aktivitas ini?',
+      okText: 'Hapus',
+      cancelText: 'Batal',
+      okType: 'danger',
+      centered: true,
+      onOk: async () => {
+        try {
+          const res = await fetch(`/api/activities?id=${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            message.success('Aktivitas berhasil dihapus.');
+            await fetchActivities();
+          } else {
+            message.error('Gagal menghapus aktivitas.');
+          }
+        } catch (err) {
+          console.error(err);
+        }
       }
-    } catch (err) {
-      console.error(err);
-    }
+    });
   };
 
   const loadWorkoutForEditing = (workout) => {
@@ -1907,18 +1970,28 @@ export default function Home() {
   };
 
   const deleteWorkout = async (id) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus sesi latihan ini?')) return;
-    try {
-      const res = await fetch(`/api/workouts?id=${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        await fetchWorkouts();
-        await fetchAnalytics();
-      } else {
-        alert('Gagal menghapus latihan.');
+    Modal.confirm({
+      title: 'Hapus Sesi Latihan?',
+      content: 'Apakah Anda yakin ingin menghapus sesi latihan ini secara permanen dari riwayat Anda?',
+      okText: 'Hapus',
+      cancelText: 'Batal',
+      okType: 'danger',
+      centered: true,
+      onOk: async () => {
+        try {
+          const res = await fetch(`/api/workouts?id=${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            message.success('Sesi latihan berhasil dihapus.');
+            await fetchWorkouts();
+            await fetchAnalytics();
+          } else {
+            message.error('Gagal menghapus latihan.');
+          }
+        } catch (e) {
+          console.error(e);
+        }
       }
-    } catch (e) {
-      console.error(e);
-    }
+    });
   };
 
   // 4. Progress Image Gallery Actions
@@ -1926,8 +1999,8 @@ export default function Home() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 2.5 * 1024 * 1024) {
-      alert('Ukuran foto terlalu besar. Maksimal 2.5 MB.');
+    if (file.size > 5 * 1024 * 1024) {
+      message.warning('Ukuran foto terlalu besar. Maksimal 5 MB.');
       return;
     }
 
@@ -1950,14 +2023,14 @@ export default function Home() {
         if (res.ok) {
           setImageNotes('');
           await fetchGallery();
-          alert('Foto progres berhasil diunggah!');
+          message.success('Foto progres berhasil diunggah!');
         } else {
           const err = await res.json();
-          alert(err.error || 'Gagal mengunggah foto.');
+          message.error(err.error || 'Gagal mengunggah foto.');
         }
       } catch (err) {
         console.error(err);
-        alert('Gagal mengunggah foto progres.');
+        message.error('Gagal mengunggah foto progres.');
       } finally {
         setUploadingImage(false);
       }
@@ -1965,18 +2038,28 @@ export default function Home() {
   };
 
   const deleteImage = async (id) => {
-    if (!confirm('Hapus foto progres ini?')) return;
-    try {
-      const res = await fetch(`/api/images?id=${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setSelectedImage(null);
-        await fetchGallery();
-      } else {
-        alert('Gagal menghapus foto.');
+    Modal.confirm({
+      title: 'Hapus Foto Progres?',
+      content: 'Apakah Anda yakin ingin menghapus foto progres ini secara permanen?',
+      okText: 'Hapus',
+      cancelText: 'Batal',
+      okType: 'danger',
+      centered: true,
+      onOk: async () => {
+        try {
+          const res = await fetch(`/api/images?id=${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            message.success('Foto progres berhasil dihapus.');
+            setSelectedImage(null);
+            await fetchGallery();
+          } else {
+            message.error('Gagal menghapus foto.');
+          }
+        } catch (e) {
+          console.error(e);
+        }
       }
-    } catch (e) {
-      console.error(e);
-    }
+    });
   };
 
   const capitalizeWords = (str) => {
@@ -3841,133 +3924,160 @@ export default function Home() {
             <div className="glass-card">
               <h3 className="text-sm font-semibold text-secondary mb-3">Makanan Yang Dikonsumsi</h3>
               {loggedMeals.length > 0 ? (
-                <div className="flex flex-col gap-2.5 max-h-[40vh] overflow-y-auto pr-1">
-                  {loggedMeals.map((meal) => (
-                    <div 
-                      key={meal.id} 
-                      onClick={() => setExpandedMeals(prev => ({ ...prev, [meal.id]: !prev[meal.id] }))}
-                      className="flex flex-col gap-2 bg-white/5 border border-white/5 hover:border-white/10 rounded-xl p-3 text-xs cursor-pointer transition-all animate-pop-in"
-                    >
-                      <div className="flex gap-3 items-center">
-                        {meal.image_data && (
-                          <img 
-                            src={meal.image_data} 
-                            alt={meal.food_name} 
-                            className="w-10 h-10 object-cover rounded-lg border border-white/10 shrink-0" 
-                          />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-center">
-                            <span className="font-semibold text-slate-200 truncate">{meal.food_name}, {Math.round(parseFloat(meal.calories))} kcal</span>
-                            <button 
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); handleDeleteMealLog(meal.id); }}
-                              className="text-muted hover:text-rose-400 p-1 rounded transition-colors shrink-0"
+                <div className="flex flex-col gap-4 max-h-[40vh] overflow-y-auto pr-1">
+                  {[
+                    { name: 'Makan Pagi', label: '🍳 Makan Pagi' },
+                    { name: 'Makan Siang', label: '☀️ Makan Siang' },
+                    { name: 'Makan Malam', label: '🌙 Makan Malam' },
+                    { name: 'Camilan', label: '🍎 Camilan' }
+                  ].map(section => {
+                    const sectionMeals = loggedMeals.filter(m => {
+                      const mt = m.meal_time || 'Camilan';
+                      const isValid = ['Makan Pagi', 'Makan Siang', 'Makan Malam', 'Camilan'].includes(mt);
+                      if (!isValid && section.name === 'Camilan') return true;
+                      return mt === section.name;
+                    });
+                    if (sectionMeals.length === 0) return null;
+
+                    const sectionCalories = sectionMeals.reduce((sum, m) => sum + parseFloat(m.calories), 0);
+
+                    return (
+                      <div key={section.name} className="flex flex-col gap-2 animate-pop-in">
+                        <div className="flex justify-between items-center border-b border-white/5 pb-1 px-1">
+                          <span className="text-[11px] font-bold text-slate-300">{section.label}</span>
+                          <span className="text-[10px] font-semibold text-purple-glow">{Math.round(sectionCalories)} kcal</span>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {sectionMeals.map((meal) => (
+                            <div 
+                              key={meal.id} 
+                              onClick={() => setExpandedMeals(prev => ({ ...prev, [meal.id]: !prev[meal.id] }))}
+                              className="flex flex-col gap-2 bg-white/5 border border-white/5 hover:border-white/10 rounded-xl p-3 text-xs cursor-pointer transition-all animate-pop-in"
                             >
-                              <Minus className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                              <div className="flex gap-3 items-center">
+                                {meal.image_data && (
+                                  <img 
+                                    src={meal.image_data} 
+                                    alt={meal.food_name} 
+                                    className="w-10 h-10 object-cover rounded-lg border border-white/10 shrink-0" 
+                                  />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex justify-between items-center">
+                                    <span className="font-semibold text-slate-200 truncate">{meal.food_name}, {Math.round(parseFloat(meal.calories))} kcal</span>
+                                    <button 
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteMealLog(meal.id); }}
+                                      className="bg-transparent border-0 p-1.5 text-slate-400 hover:text-rose-500 hover:scale-115 active:scale-90 transition-all cursor-pointer flex items-center justify-center shrink-0"
+                                    >
+                                      <Minus className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {expandedMeals[meal.id] && (
+                                <div className="flex flex-col gap-3 border-t border-white/5 pt-2 mt-1 animate-slide-up" onClick={e => e.stopPropagation()}>
+                                  <div className="flex flex-col gap-1.5">
+                                    <label className="text-[10px] text-secondary">Ubah Berat (gram)</label>
+                                    <div className="flex gap-2 items-center">
+                                      <div className="input-wrapper-suffix h-9 flex-1">
+                                        <input 
+                                          type="text" 
+                                          inputMode="decimal"
+                                          placeholder="Berat..."
+                                          value={
+                                            editMealWeight[meal.id] !== undefined 
+                                              ? editMealWeight[meal.id] 
+                                              : parseFloat(meal.weight_g)
+                                          }
+                                          onChange={e => {
+                                            const valStr = e.target.value;
+                                            setEditMealWeight(prev => ({ ...prev, [meal.id]: valStr }));
+                                          }}
+                                        />
+                                        <span>gram</span>
+                                      </div>
+                                      <Button
+                                        type="primary"
+                                        size="small"
+                                        loading={updatingMealId === meal.id}
+                                        onClick={() => handleSaveMealEdit(meal)}
+                                        className="h-9 text-[11px] px-3 font-semibold rounded-lg"
+                                      >
+                                        Simpan
+                                      </Button>
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-4 gap-1.5 text-center text-[9.5px] bg-black/30 p-2 rounded-lg border border-white/5">
+                                    <div>
+                                      <span className="text-muted block text-[8px] uppercase font-semibold">Kalori</span>
+                                      <span className="font-bold text-slate-200">
+                                        {Math.round(
+                                          (parseFloat(meal.calories) / (parseFloat(meal.weight_g) || 1)) * 
+                                          parseIndonesianFloatWithDefault(
+                                            editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
+                                            0
+                                          )
+                                        )} kcal
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted block text-[8px] uppercase font-semibold">Protein</span>
+                                      <span className="font-bold text-slate-200">
+                                        {(
+                                          ((parseFloat(meal.protein) / (parseFloat(meal.weight_g) || 1)) * 
+                                          parseIndonesianFloatWithDefault(
+                                            editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
+                                            0
+                                          ))
+                                        ).toFixed(1)} g
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted block text-[8px] uppercase font-semibold">Karbo</span>
+                                      <span className="font-bold text-slate-200">
+                                        {(
+                                          ((parseFloat(meal.carbs) / (parseFloat(meal.weight_g) || 1)) * 
+                                          parseIndonesianFloatWithDefault(
+                                            editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
+                                            0
+                                          ))
+                                        ).toFixed(1)} g
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted block text-[8px] uppercase font-semibold">Lemak</span>
+                                      <span className="font-bold text-slate-200">
+                                        {(
+                                          ((parseFloat(meal.fat) / (parseFloat(meal.weight_g) || 1)) * 
+                                          parseIndonesianFloatWithDefault(
+                                            editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
+                                            0
+                                          ))
+                                        ).toFixed(1)} g
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {meal.image_data && (
+                                    <div className="w-full rounded-xl overflow-hidden border border-white/10 mt-1">
+                                      <img 
+                                        src={meal.image_data} 
+                                        alt={meal.food_name} 
+                                        className="w-full max-h-48 object-cover" 
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       </div>
-                      
-                      {expandedMeals[meal.id] && (
-                        <div className="flex flex-col gap-3 border-t border-white/5 pt-2 mt-1 animate-slide-up" onClick={e => e.stopPropagation()}>
-                          <div className="flex flex-col gap-1.5">
-                            <label className="text-[10px] text-secondary">Ubah Berat (gram)</label>
-                            <div className="flex gap-2 items-center">
-                              <div className="input-wrapper-suffix h-9 flex-1">
-                                <input 
-                                  type="text" 
-                                  inputMode="decimal"
-                                  placeholder="Berat..."
-                                  value={
-                                    editMealWeight[meal.id] !== undefined 
-                                      ? editMealWeight[meal.id] 
-                                      : parseFloat(meal.weight_g)
-                                  }
-                                  onChange={e => {
-                                    const valStr = e.target.value;
-                                    setEditMealWeight(prev => ({ ...prev, [meal.id]: valStr }));
-                                  }}
-                                />
-                                <span>gram</span>
-                              </div>
-                              <Button
-                                type="primary"
-                                size="small"
-                                loading={updatingMealId === meal.id}
-                                onClick={() => handleSaveMealEdit(meal)}
-                                className="h-9 text-[11px] px-3 font-semibold rounded-lg"
-                              >
-                                Simpan
-                              </Button>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-4 gap-1.5 text-center text-[9.5px] bg-black/30 p-2 rounded-lg border border-white/5">
-                            <div>
-                              <span className="text-muted block text-[8px] uppercase font-semibold">Kalori</span>
-                              <span className="font-bold text-slate-200">
-                                {Math.round(
-                                  (parseFloat(meal.calories) / (parseFloat(meal.weight_g) || 1)) * 
-                                  parseIndonesianFloatWithDefault(
-                                    editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
-                                    0
-                                  )
-                                )} kcal
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-muted block text-[8px] uppercase font-semibold">Protein</span>
-                              <span className="font-bold text-slate-200">
-                                {(
-                                  ((parseFloat(meal.protein) / (parseFloat(meal.weight_g) || 1)) * 
-                                  parseIndonesianFloatWithDefault(
-                                    editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
-                                    0
-                                  ))
-                                ).toFixed(1)} g
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-muted block text-[8px] uppercase font-semibold">Karbo</span>
-                              <span className="font-bold text-slate-200">
-                                {(
-                                  ((parseFloat(meal.carbs) / (parseFloat(meal.weight_g) || 1)) * 
-                                  parseIndonesianFloatWithDefault(
-                                    editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
-                                    0
-                                  ))
-                                ).toFixed(1)} g
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-muted block text-[8px] uppercase font-semibold">Lemak</span>
-                              <span className="font-bold text-slate-200">
-                                {(
-                                  ((parseFloat(meal.fat) / (parseFloat(meal.weight_g) || 1)) * 
-                                  parseIndonesianFloatWithDefault(
-                                    editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
-                                    0
-                                  ))
-                                ).toFixed(1)} g
-                              </span>
-                            </div>
-                          </div>
-
-                          {meal.image_data && (
-                            <div className="w-full rounded-xl overflow-hidden border border-white/10 mt-1">
-                              <img 
-                                src={meal.image_data} 
-                                alt={meal.food_name} 
-                                className="w-full max-h-48 object-cover" 
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-8 text-xs text-muted">Belum ada catatan makanan untuk hari ini. Silakan input makanan Anda di bawah.</div>
@@ -3977,6 +4087,23 @@ export default function Home() {
             {/* Food logger form container */}
             <div id="new-meal-form" className="glass-card flex flex-col gap-4">
               <h3 className="text-sm font-semibold text-primary m-0 border-b border-white/5 pb-2">Catat Makanan Baru</h3>
+
+              {/* Meal Time Selector */}
+              <div className="flex flex-col gap-1.5 bg-white/5 border border-white/5 p-2.5 rounded-xl">
+                <span className="text-[10px] text-secondary font-semibold">Waktu Makan:</span>
+                <Segmented
+                  options={[
+                    { value: 'Makan Pagi', label: <div className="flex items-center gap-1 justify-center py-0.5"><Coffee className="w-3.5 h-3.5 shrink-0" /> <span>Pagi</span></div> },
+                    { value: 'Makan Siang', label: <div className="flex items-center gap-1 justify-center py-0.5"><Sun className="w-3.5 h-3.5 shrink-0" /> <span>Siang</span></div> },
+                    { value: 'Makan Malam', label: <div className="flex items-center gap-1 justify-center py-0.5"><Moon className="w-3.5 h-3.5 shrink-0" /> <span>Malam</span></div> },
+                    { value: 'Camilan', label: <div className="flex items-center gap-1 justify-center py-0.5"><Apple className="w-3.5 h-3.5 shrink-0" /> <span>Camilan</span></div> }
+                  ]}
+                  value={selectedMealTime}
+                  onChange={value => setSelectedMealTime(value)}
+                  block
+                  className="bg-black/20 border border-white/5 text-xs rounded-lg"
+                />
+              </div>
 
               {/* Segmented Control / Sub Tabs */}
               <div className="grid grid-cols-2 gap-2 text-center bg-white/5 p-1 rounded-xl">
@@ -4055,14 +4182,8 @@ export default function Home() {
                             className={`expandable-details ${selectedLibraryFood?.id === item.id ? 'expanded' : ''}`}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <div className="flex gap-4 text-[9.5px] text-muted flex-wrap mb-2">
-                              <span>Protein: {parseFloat(item.protein)} g</span>
-                              <span>•</span>
-                              <span>Karbo: {parseFloat(item.carbs)} g</span>
-                              <span>•</span>
-                              <span>Lemak: {parseFloat(item.fat)} g</span>
-                              <span>•</span>
-                              <span className="italic text-[8.5px]">(per {parseFloat(item.serving_g || 100)} g)</span>
+                            <div className="text-[9.5px] text-muted mb-2 leading-relaxed">
+                              Protein: {parseFloat(item.protein)} g • Karbo: {parseFloat(item.carbs)} g • Lemak: {parseFloat(item.fat)} g <span className="italic text-[8.5px] ml-1">(per {parseFloat(item.serving_g || 100)} g)</span>
                             </div>
 
                             {selectedLibraryFood?.id === item.id && (
@@ -4098,15 +4219,15 @@ export default function Home() {
                                   </div>
                                   <div>
                                     <span className="text-muted block text-[8px] uppercase font-semibold">Protein</span>
-                                    <span className="font-bold text-slate-200">{mealForm.protein}g</span>
+                                    <span className="font-bold text-slate-200">{mealForm.protein} g</span>
                                   </div>
                                   <div>
                                     <span className="text-muted block text-[8px] uppercase font-semibold">Karbo</span>
-                                    <span className="font-bold text-slate-200">{mealForm.carbs}g</span>
+                                    <span className="font-bold text-slate-200">{mealForm.carbs} g</span>
                                   </div>
                                   <div>
                                     <span className="text-muted block text-[8px] uppercase font-semibold">Lemak</span>
-                                    <span className="font-bold text-slate-200">{mealForm.fat}g</span>
+                                    <span className="font-bold text-slate-200">{mealForm.fat} g</span>
                                   </div>
                                 </div>
 
@@ -4126,29 +4247,30 @@ export default function Home() {
                                       </button>
                                     </div>
                                   ) : (
-                                    <label className="flex items-center justify-center gap-1.5 h-9 border border-dashed border-white/10 hover:border-purple/35 rounded-lg cursor-pointer bg-white/5 hover:bg-white/10 transition-all text-muted hover:text-slate-200">
-                                      <Camera className="w-3.5 h-3.5 text-secondary" />
-                                      <span className="text-[10px]">Foto Makanan (Opsional)</span>
-                                      <input 
-                                        type="file" 
-                                        accept="image/*" 
-                                        className="hidden" 
-                                        onChange={e => {
-                                          const file = e.target.files?.[0];
-                                          if (file) {
-                                            if (file.size / 1024 / 1024 >= 2.5) {
-                                              alert('Ukuran foto terlalu besar. Maksimal 2.5 MB.');
-                                              return;
-                                            }
-                                            const reader = new FileReader();
-                                            reader.readAsDataURL(file);
-                                            reader.onload = () => {
-                                              setMealImage(reader.result);
-                                            };
-                                          }
-                                        }}
-                                      />
-                                    </label>
+                                    <Upload
+                                      accept="image/*"
+                                      showUploadList={false}
+                                      beforeUpload={file => {
+                                        if (file.size / 1024 / 1024 >= 5) {
+                                          message.warning('Ukuran foto terlalu besar. Maksimal 5 MB.');
+                                          return false;
+                                        }
+                                        const reader = new FileReader();
+                                        reader.readAsDataURL(file);
+                                        reader.onload = () => {
+                                          setMealImage(reader.result);
+                                        };
+                                        return false;
+                                      }}
+                                      className="w-full"
+                                    >
+                                      <Button 
+                                        icon={<Camera className="w-3.5 h-3.5 text-secondary" />} 
+                                        className="h-9 text-[10px] w-full bg-white/5 border-white/10 text-slate-300 hover:text-slate-200 flex items-center justify-center gap-1.5"
+                                      >
+                                        Foto Makanan (Opsional)
+                                      </Button>
+                                    </Upload>
                                   )}
                                 </div>
 
@@ -4255,30 +4377,31 @@ export default function Home() {
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 animate-pop-in">
-                        <label className="flex-1 flex items-center justify-center gap-1.5 h-10 border border-dashed border-white/10 hover:border-purple/35 rounded-xl cursor-pointer bg-white/5 hover:bg-white/10 transition-all text-muted hover:text-slate-200">
-                          <Camera className="w-4 h-4 text-secondary" />
-                          <span className="text-xs">Ambil / Unggah Foto Makanan</span>
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            className="hidden" 
-                            onChange={e => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                if (file.size / 1024 / 1024 >= 2.5) {
-                                  alert('Ukuran foto terlalu besar. Maksimal 2.5 MB.');
-                                  return;
-                                }
-                                const reader = new FileReader();
-                                reader.readAsDataURL(file);
-                                reader.onload = () => {
-                                  setMealImage(reader.result);
-                                };
-                              }
-                            }}
-                          />
-                        </label>
+                      <div className="flex items-center gap-2 animate-pop-in w-full">
+                        <Upload
+                          accept="image/*"
+                          showUploadList={false}
+                          beforeUpload={file => {
+                            if (file.size / 1024 / 1024 >= 5) {
+                              message.warning('Ukuran foto terlalu besar. Maksimal 5 MB.');
+                              return false;
+                            }
+                            const reader = new FileReader();
+                            reader.readAsDataURL(file);
+                            reader.onload = () => {
+                              setMealImage(reader.result);
+                            };
+                            return false;
+                          }}
+                          className="w-full"
+                        >
+                          <Button 
+                            icon={<Camera className="w-4 h-4 text-secondary" />} 
+                            className="h-10 text-xs w-full bg-white/5 border-white/10 text-slate-300 hover:text-slate-200 flex items-center justify-center gap-1.5 rounded-xl"
+                          >
+                            Ambil / Unggah Foto Makanan
+                          </Button>
+                        </Upload>
                       </div>
                     )}
                   </div>
@@ -4327,9 +4450,9 @@ export default function Home() {
                   accept="image/*"
                   multiple={false}
                   beforeUpload={file => {
-                    const isLt2M = file.size / 1024 / 1024 < 2.5;
-                    if (!isLt2M) {
-                      alert('Ukuran foto terlalu besar. Maksimal 2.5 MB.');
+                    const isLt5M = file.size / 1024 / 1024 < 5;
+                    if (!isLt5M) {
+                      message.warning('Ukuran foto terlalu besar. Maksimal 5 MB.');
                       return false;
                     }
                     
@@ -4351,14 +4474,14 @@ export default function Home() {
                         if (res.ok) {
                           setImageNotes('');
                           await fetchGallery();
-                          alert('Foto progres berhasil diunggah!');
+                          message.success('Foto progres berhasil diunggah!');
                         } else {
                           const err = await res.json();
-                          alert(err.error || 'Gagal mengunggah foto.');
+                          message.error(err.error || 'Gagal mengunggah foto.');
                         }
                       } catch (err) {
                         console.error(err);
-                        alert('Gagal mengunggah foto progres.');
+                        message.error('Gagal mengunggah foto progres.');
                       } finally {
                         setUploadingImage(false);
                       }
@@ -4374,7 +4497,7 @@ export default function Home() {
                   <p className="ant-upload-text text-sm font-semibold text-slate-200">
                     {uploadingImage ? 'Mengunggah...' : 'Klik atau seret foto ke area ini'}
                   </p>
-                  <p className="ant-upload-hint text-[11px] text-muted mt-1">Mendukung format gambar hingga 2.5 MB</p>
+                  <p className="ant-upload-hint text-[11px] text-muted mt-1">Mendukung format gambar hingga 5 MB</p>
                 </Upload.Dragger>
               </div>
             </div>

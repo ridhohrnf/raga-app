@@ -12,46 +12,48 @@ export async function GET(request) {
 
     const sql = await getDb();
 
-    // Query templates
-    const templates = await sql`
-      SELECT id, name, created_at 
-      FROM workout_templates 
-      WHERE user_id = ${user.id}
-      ORDER BY name ASC
+    // Query templates and exercises in a single JOIN query to prevent fetch failed connection issues
+    const rows = await sql`
+      SELECT 
+        t.id AS template_id, t.name AS template_name, t.created_at AS template_created_at,
+        e.id AS exercise_id, e.name AS exercise_name, e.category AS exercise_category,
+        e.order_index, e.sets AS exercise_sets
+      FROM workout_templates t
+      LEFT JOIN template_exercises e ON e.template_id = t.id
+      WHERE t.user_id = ${user.id}
+      ORDER BY t.name ASC, t.id DESC, e.order_index ASC, e.id ASC
     `;
 
-    // Process each template to fetch nested exercises
-    const result = [];
-    for (const temp of templates) {
-      const exercises = await sql`
-        SELECT id, name, category, order_index, sets 
-        FROM template_exercises 
-        WHERE template_id = ${temp.id}
-        ORDER BY order_index ASC
-      `;
-      
-      const parsedExercises = exercises.map(ex => {
+    const templatesMap = {};
+    for (const row of rows) {
+      if (!templatesMap[row.template_id]) {
+        templatesMap[row.template_id] = {
+          id: row.template_id,
+          name: row.template_name,
+          created_at: row.template_created_at,
+          exercises: []
+        };
+      }
+
+      if (row.exercise_id) {
         let parsedSets = [];
         try {
-          parsedSets = ex.sets ? JSON.parse(ex.sets) : [];
+          parsedSets = row.exercise_sets ? JSON.parse(row.exercise_sets) : [];
         } catch (e) {
           parsedSets = [];
         }
-        return {
-          id: ex.id,
-          name: ex.name,
-          category: ex.category,
-          order_index: ex.order_index,
-          sets: parsedSets
-        };
-      });
 
-      result.push({
-        ...temp,
-        exercises: parsedExercises
-      });
+        templatesMap[row.template_id].exercises.push({
+          id: row.exercise_id,
+          name: row.exercise_name,
+          category: row.exercise_category,
+          order_index: row.order_index,
+          sets: parsedSets
+        });
+      }
     }
 
+    const result = Object.values(templatesMap).sort((a, b) => a.name.localeCompare(b.name));
     return NextResponse.json({ success: true, templates: result });
   } catch (error) {
     console.error('Fetch templates error:', error);

@@ -498,7 +498,7 @@ export default function Home() {
   const handleAddMealLog = async (e) => {
     if (e) e.preventDefault();
     if (!mealForm.foodName || !mealForm.weightG) {
-      alert('Nama makanan dan berat wajib diisi.');
+      message.warning('Nama makanan dan berat wajib diisi.');
       return;
     }
 
@@ -525,14 +525,15 @@ export default function Home() {
         setMealForm({ foodName: '', weightG: 100, calories: '', protein: '', carbs: '', fat: '', isCustom: false });
         setSelectedLibraryFood(null);
         setMealImage(null);
+        message.success('Makanan berhasil dicatat!');
         await fetchLoggedMeals(nutritionDate);
       } else {
         const err = await res.json();
-        alert(err.error || 'Gagal mencatat makanan.');
+        message.error(err.error || 'Gagal mencatat makanan.');
       }
     } catch (err) {
       console.error(err);
-      alert('Gagal menghubungi server.');
+      message.error('Gagal menghubungi server.');
     } finally {
       setSubmittingMeal(false);
     }
@@ -543,9 +544,10 @@ export default function Home() {
     try {
       const res = await fetch(`/api/food-logger?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
+        message.success('Catatan makanan berhasil dihapus.');
         await fetchLoggedMeals(nutritionDate);
       } else {
-        alert('Gagal menghapus catatan makanan.');
+        message.error('Gagal menghapus catatan makanan.');
       }
     } catch (err) {
       console.error(err);
@@ -556,7 +558,7 @@ export default function Home() {
     const newWeightStr = editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g.toString();
     const newWeight = parseIndonesianFloatWithDefault(newWeightStr, 0);
     if (newWeight <= 0) {
-      alert('Berat makanan harus lebih besar dari 0.');
+      message.warning('Berat makanan harus lebih besar dari 0.');
       return;
     }
 
@@ -593,11 +595,11 @@ export default function Home() {
         await fetchLoggedMeals(nutritionDate);
       } else {
         const err = await res.json();
-        alert(err.error || 'Gagal memperbarui catatan makanan.');
+        message.error(err.error || 'Gagal memperbarui catatan makanan.');
       }
     } catch (err) {
       console.error(err);
-      alert('Masalah koneksi.');
+      message.error('Masalah koneksi.');
     } finally {
       setUpdatingMealId(null);
     }
@@ -610,7 +612,7 @@ export default function Home() {
     const servingG = parseIndonesianFloat(foodForm.servingG);
 
     if (!name || isNaN(servingG) || servingG <= 0) {
-      alert('Nama makanan dan takaran saji wajib diisi.');
+      message.warning('Nama makanan dan takaran saji wajib diisi.');
       return;
     }
 
@@ -625,7 +627,7 @@ export default function Home() {
       const hasFat = foodForm.fat !== '' && foodForm.fat !== null && !isNaN(parseIndonesianFloat(foodForm.fat));
 
       if (!hasProtein && !hasCarbs && !hasFat) {
-        alert('Masukkan total Kalori ATAU setidaknya salah satu kandungan makro (Protein/Karbo/Lemak) agar Kalori bisa dihitung otomatis.');
+        message.warning('Masukkan total Kalori ATAU setidaknya salah satu kandungan makro (Protein/Karbo/Lemak) agar Kalori bisa dihitung otomatis.');
         return;
       }
       caloriesVal = Math.round((proteinVal * 4) + (carbsVal * 4) + (fatVal * 9));
@@ -649,14 +651,14 @@ export default function Home() {
       if (res.ok) {
         setFoodForm({ name: '', calories: '', protein: '', carbs: '', fat: '', servingG: 100 });
         await fetchFoodLibrary();
-        alert('Makanan baru berhasil ditambahkan ke pustaka kustom Anda.');
+        message.success('Makanan baru berhasil ditambahkan ke pustaka kustom Anda.');
       } else {
         const err = await res.json();
-        alert(err.error || 'Gagal menambahkan ke pustaka.');
+        message.error(err.error || 'Gagal menambahkan ke pustaka.');
       }
     } catch (err) {
       console.error(err);
-      alert('Gagal menghubungi server.');
+      message.error('Gagal menghubungi server.');
     } finally {
       setSubmittingFoodItem(false);
     }
@@ -668,7 +670,7 @@ export default function Home() {
     const servingG = parseIndonesianFloat(foodForm.servingG);
 
     if (!name || isNaN(servingG) || servingG <= 0) {
-      alert('Nama makanan dan berat/takaran saji wajib diisi.');
+      message.warning('Nama makanan dan berat/takaran saji wajib diisi.');
       return;
     }
 
@@ -683,7 +685,7 @@ export default function Home() {
       const hasFat = foodForm.fat !== '' && foodForm.fat !== null && !isNaN(parseIndonesianFloat(foodForm.fat));
 
       if (!hasProtein && !hasCarbs && !hasFat) {
-        alert('Masukkan total Kalori ATAU setidaknya salah satu kandungan makro (Protein/Karbo/Lemak) agar Kalori bisa dihitung otomatis.');
+        message.warning('Masukkan total Kalori ATAU setidaknya salah satu kandungan makro (Protein/Karbo/Lemak) agar Kalori bisa dihitung otomatis.');
         return;
       }
       caloriesVal = Math.round((proteinVal * 4) + (carbsVal * 4) + (fatVal * 9));
@@ -712,14 +714,14 @@ export default function Home() {
         setFoodForm({ name: '', calories: '', protein: '', carbs: '', fat: '', servingG: 100 });
         setMealImage(null);
         await fetchLoggedMeals(nutritionDate);
-        alert('Makanan kustom berhasil dicatat ke diary harian Anda.');
+        message.success('Makanan kustom berhasil dicatat ke diary harian Anda.');
       } else {
         const err = await res.json();
-        alert(err.error || 'Gagal mencatat makanan.');
+        message.error(err.error || 'Gagal mencatat makanan.');
       }
     } catch (err) {
       console.error(err);
-      alert('Gagal menghubungi server.');
+      message.error('Gagal menghubungi server.');
     } finally {
       setSubmittingMeal(false);
     }
@@ -736,7 +738,7 @@ export default function Home() {
 
     // For "Catat & Tambahkan ke Pustaka", ALL columns must be fully filled
     if (!name || isNaN(servingG) || isNaN(caloriesVal) || isNaN(proteinVal) || isNaN(carbsVal) || isNaN(fatVal)) {
-      alert('Semua kolom (Nama, Takaran, Kalori, Protein, Karbo, Lemak) wajib diisi lengkap untuk pilihan ini.');
+      message.warning('Semua kolom (Nama, Takaran, Kalori, Protein, Karbo, Lemak) wajib diisi lengkap untuk pilihan ini.');
       return;
     }
 
@@ -759,7 +761,7 @@ export default function Home() {
 
       if (!libRes.ok) {
         const err = await libRes.json();
-        alert(err.error || 'Gagal menambahkan ke pustaka.');
+        message.error(err.error || 'Gagal menambahkan ke pustaka.');
         return;
       }
 
@@ -786,14 +788,14 @@ export default function Home() {
         setMealImage(null);
         await fetchFoodLibrary();
         await fetchLoggedMeals(nutritionDate);
-        alert('Makanan kustom berhasil dicatat dan disimpan ke pustaka Anda.');
+        message.success('Makanan kustom berhasil dicatat dan disimpan ke pustaka Anda.');
       } else {
         const err = await logRes.json();
-        alert(err.error || 'Gagal mencatat makanan.');
+        message.error(err.error || 'Gagal mencatat makanan.');
       }
     } catch (err) {
       console.error(err);
-      alert('Koneksi bermasalah.');
+      message.error('Koneksi bermasalah.');
     } finally {
       setSubmittingFoodItem(false);
       setSubmittingMeal(false);
@@ -805,10 +807,11 @@ export default function Home() {
     try {
       const res = await fetch(`/api/food-library?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
+        message.success('Makanan berhasil dihapus dari pustaka.');
         await fetchFoodLibrary();
       } else {
         const err = await res.json();
-        alert(err.error || 'Gagal menghapus makanan dari pustaka.');
+        message.error(err.error || 'Gagal menghapus makanan dari pustaka.');
       }
     } catch (err) {
       console.error(err);
@@ -914,7 +917,7 @@ export default function Home() {
   const handleSaveDailyTarget = async (e) => {
     if (e) e.preventDefault();
     if (!dailyTargetForm.targetCalories) {
-      alert('Target kalori wajib diisi.');
+      message.warning('Target kalori wajib diisi.');
       return;
     }
 
@@ -952,15 +955,16 @@ export default function Home() {
       });
 
       if (res.ok) {
+        message.success('Target kalori harian berhasil diperbarui!');
         await fetchDailyTarget(nutritionDate);
         setShowDailyTargetModal(false);
       } else {
         const err = await res.json();
-        alert(err.error || 'Gagal menyimpan target harian.');
+        message.error(err.error || 'Gagal menyimpan target harian.');
       }
     } catch (err) {
       console.error(err);
-      alert('Gagal menghubungi server.');
+      message.error('Gagal menghubungi server.');
     } finally {
       setSubmittingDailyTarget(false);
     }
@@ -976,15 +980,16 @@ export default function Home() {
       });
 
       if (res.ok) {
+        message.success('Target harian berhasil direset ke default.');
         await fetchDailyTarget(nutritionDate);
         setShowDailyTargetModal(false);
       } else {
         const err = await res.json();
-        alert(err.error || 'Gagal mereset target harian.');
+        message.error(err.error || 'Gagal mereset target harian.');
       }
     } catch (err) {
       console.error(err);
-      alert('Gagal menghubungi server.');
+      message.error('Gagal menghubungi server.');
     } finally {
       setSubmittingDailyTarget(false);
     }
@@ -3921,7 +3926,7 @@ export default function Home() {
                                     editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
                                     0
                                   ))
-                                ).toFixed(1)}g
+                                ).toFixed(1)} g
                               </span>
                             </div>
                             <div>
@@ -3933,7 +3938,7 @@ export default function Home() {
                                     editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
                                     0
                                   ))
-                                ).toFixed(1)}g
+                                ).toFixed(1)} g
                               </span>
                             </div>
                             <div>
@@ -3945,7 +3950,7 @@ export default function Home() {
                                     editMealWeight[meal.id] !== undefined ? editMealWeight[meal.id] : meal.weight_g, 
                                     0
                                   ))
-                                ).toFixed(1)}g
+                                ).toFixed(1)} g
                               </span>
                             </div>
                           </div>
@@ -4050,11 +4055,14 @@ export default function Home() {
                             className={`expandable-details ${selectedLibraryFood?.id === item.id ? 'expanded' : ''}`}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <div className="flex gap-3 text-[9.5px] text-muted flex-wrap mb-2">
-                              <span>Protein: {parseFloat(item.protein)}g</span>
-                              <span>Karbo: {parseFloat(item.carbs)}g</span>
-                              <span>Lemak: {parseFloat(item.fat)}g</span>
-                              <span className="italic text-[8.5px]">(per {parseFloat(item.serving_g || 100)}g)</span>
+                            <div className="flex gap-4 text-[9.5px] text-muted flex-wrap mb-2">
+                              <span>Protein: {parseFloat(item.protein)} g</span>
+                              <span>•</span>
+                              <span>Karbo: {parseFloat(item.carbs)} g</span>
+                              <span>•</span>
+                              <span>Lemak: {parseFloat(item.fat)} g</span>
+                              <span>•</span>
+                              <span className="italic text-[8.5px]">(per {parseFloat(item.serving_g || 100)} g)</span>
                             </div>
 
                             {selectedLibraryFood?.id === item.id && (

@@ -96,3 +96,52 @@ export async function DELETE(request) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+export async function PUT(request) {
+  try {
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id, name, calories, protein, carbs, fat, serving_g } = await request.json();
+
+    if (!id || !name) {
+      return NextResponse.json({ error: 'ID dan nama makanan wajib diisi' }, { status: 400 });
+    }
+
+    const sql = await getDb();
+
+    // Check if another food item with the same name exists for this user
+    const existing = await sql`
+      SELECT id FROM food_items 
+      WHERE user_id = ${user.id} AND LOWER(name) = LOWER(${name.trim()}) AND id != ${id}
+      LIMIT 1
+    `;
+
+    if (existing.length > 0) {
+      return NextResponse.json({ error: 'Makanan dengan nama ini sudah ada di pustaka Anda.' }, { status: 400 });
+    }
+
+    const result = await sql`
+      UPDATE food_items 
+      SET name = ${name.trim()}, 
+          calories = ${calories || 0}, 
+          protein = ${protein || 0}, 
+          carbs = ${carbs || 0}, 
+          fat = ${fat || 0}, 
+          serving_g = ${serving_g || 100}
+      WHERE id = ${id} AND user_id = ${user.id}
+      RETURNING *
+    `;
+
+    if (result.length === 0) {
+      return NextResponse.json({ error: 'Makanan tidak ditemukan atau tidak dapat diubah.' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, item: result[0] });
+  } catch (error) {
+    console.error('Food library PUT error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}

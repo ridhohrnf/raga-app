@@ -286,6 +286,12 @@ export default function Home() {
   const [customExName, setCustomExName] = useState('');
   const [customExCategory, setCustomExCategory] = useState('Chest');
 
+  // Custom food library editing & meal shifts
+  const [showEditFoodModal, setShowEditFoodModal] = useState(false);
+  const [editFoodForm, setEditFoodForm] = useState({ id: null, name: '', calories: '', protein: '', carbs: '', fat: '', servingG: 100 });
+  const [submittingEditFood, setSubmittingEditFood] = useState(false);
+  const [editMealTime, setEditMealTime] = useState({});
+
 
   const fetchDashboardExerciseProgress = async () => {
     if (!dashboardExercise) return;
@@ -535,11 +541,16 @@ export default function Home() {
       });
 
       if (res.ok) {
+        const data = await res.json();
         setMealForm({ foodName: '', weightG: 100, calories: '', protein: '', carbs: '', fat: '', isCustom: false });
         setSelectedLibraryFood(null);
         setMealImage(null);
         message.success('Makanan berhasil dicatat!');
-        await fetchLoggedMeals(nutritionDate);
+        if (data.success && data.meal) {
+          setLoggedMeals(prev => [data.meal, ...prev]);
+        } else {
+          await fetchLoggedMeals(nutritionDate);
+        }
       } else {
         const err = await res.json();
         message.error(err.error || 'Gagal mencatat makanan.');
@@ -561,16 +572,20 @@ export default function Home() {
       okType: 'danger',
       centered: true,
       onOk: async () => {
+        const originalMeals = [...loggedMeals];
+        setLoggedMeals(prev => prev.filter(m => m.id !== id));
         try {
           const res = await fetch(`/api/food-logger?id=${id}`, { method: 'DELETE' });
           if (res.ok) {
             message.success('Catatan makanan berhasil dihapus.');
-            await fetchLoggedMeals(nutritionDate);
           } else {
             message.error('Gagal menghapus catatan makanan.');
+            setLoggedMeals(originalMeals);
           }
         } catch (err) {
           console.error(err);
+          message.error('Masalah koneksi.');
+          setLoggedMeals(originalMeals);
         }
       }
     });
@@ -591,6 +606,8 @@ export default function Home() {
     const newCarbs = (parseFloat(meal.carbs) / originalWeight) * newWeight;
     const newFat = (parseFloat(meal.fat) / originalWeight) * newWeight;
 
+    const newMealTime = editMealTime[meal.id] !== undefined ? editMealTime[meal.id] : (meal.meal_time || 'Camilan');
+
     setUpdatingMealId(meal.id);
     try {
       const res = await fetch('/api/food-logger', {
@@ -602,19 +619,30 @@ export default function Home() {
           calories: Math.round(newCalories * 10) / 10,
           protein: Math.round(newProtein * 10) / 10,
           carbs: Math.round(newCarbs * 10) / 10,
-          fat: Math.round(newFat * 10) / 10
+          fat: Math.round(newFat * 10) / 10,
+          meal_time: newMealTime
         })
       });
 
       if (res.ok) {
+        const data = await res.json();
         message.success('Catatan makanan berhasil diperbarui!');
         setEditMealWeight(prev => {
           const updated = { ...prev };
           delete updated[meal.id];
           return updated;
         });
+        setEditMealTime(prev => {
+          const updated = { ...prev };
+          delete updated[meal.id];
+          return updated;
+        });
         setExpandedMeals(prev => ({ ...prev, [meal.id]: false }));
-        await fetchLoggedMeals(nutritionDate);
+        if (data.success && data.meal) {
+          setLoggedMeals(prev => prev.map(m => m.id === meal.id ? data.meal : m));
+        } else {
+          await fetchLoggedMeals(nutritionDate);
+        }
       } else {
         const err = await res.json();
         message.error(err.error || 'Gagal memperbarui catatan makanan.');
@@ -826,6 +854,59 @@ export default function Home() {
     }
   };
 
+  const handleStartEditFoodItem = (item) => {
+    setEditFoodForm({
+      id: item.id,
+      name: item.name,
+      calories: item.calories,
+      protein: item.protein,
+      carbs: item.carbs,
+      fat: item.fat,
+      servingG: item.serving_g || 100
+    });
+    setShowEditFoodModal(true);
+  };
+
+  const handleSaveEditFoodItem = async (e) => {
+    if (e) e.preventDefault();
+    if (!editFoodForm.name) {
+      message.warning('Nama makanan wajib diisi.');
+      return;
+    }
+
+    setSubmittingEditFood(true);
+    try {
+      const res = await fetch('/api/food-library', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editFoodForm.id,
+          name: editFoodForm.name,
+          calories: parseFloat(editFoodForm.calories || 0),
+          protein: parseFloat(editFoodForm.protein || 0),
+          carbs: parseFloat(editFoodForm.carbs || 0),
+          fat: parseFloat(editFoodForm.fat || 0),
+          serving_g: parseFloat(editFoodForm.servingG || 100)
+        })
+      });
+
+      if (res.ok) {
+        message.success('Makanan pustaka berhasil diubah!');
+        setShowEditFoodModal(false);
+        setSelectedLibraryFood(null);
+        await fetchFoodLibrary();
+      } else {
+        const err = await res.json();
+        message.error(err.error || 'Gagal mengubah makanan pustaka.');
+      }
+    } catch (err) {
+      console.error(err);
+      message.error('Koneksi bermasalah.');
+    } finally {
+      setSubmittingEditFood(false);
+    }
+  };
+
   const handleDeleteFoodItem = async (id) => {
     Modal.confirm({
       title: 'Hapus Makanan dari Pustaka?',
@@ -839,6 +920,8 @@ export default function Home() {
           const res = await fetch(`/api/food-library?id=${id}`, { method: 'DELETE' });
           if (res.ok) {
             message.success('Makanan berhasil dihapus dari pustaka.');
+            setShowEditFoodModal(false);
+            setSelectedLibraryFood(null);
             await fetchFoodLibrary();
           } else {
             const err = await res.json();
@@ -3978,35 +4061,54 @@ export default function Home() {
                               
                               {expandedMeals[meal.id] && (
                                 <div className="flex flex-col gap-3 border-t border-white/5 pt-2 mt-1 animate-slide-up" onClick={e => e.stopPropagation()}>
-                                  <div className="flex flex-col gap-1.5">
-                                    <label className="text-[10px] text-secondary">Ubah Berat (gram)</label>
-                                    <div className="flex gap-2 items-center">
-                                      <div className="input-wrapper-suffix h-9 flex-1">
-                                        <input 
-                                          type="text" 
-                                          inputMode="decimal"
-                                          placeholder="Berat..."
-                                          value={
-                                            editMealWeight[meal.id] !== undefined 
-                                              ? editMealWeight[meal.id] 
-                                              : parseFloat(meal.weight_g)
-                                          }
-                                          onChange={e => {
-                                            const valStr = e.target.value;
-                                            setEditMealWeight(prev => ({ ...prev, [meal.id]: valStr }));
-                                          }}
-                                        />
-                                        <span>gram</span>
+                                  <div className="flex flex-col gap-3">
+                                    <div className="flex flex-col gap-1.5">
+                                      <label className="text-[10px] text-secondary">Ubah Berat (gram)</label>
+                                      <div className="flex gap-2 items-center">
+                                        <div className="input-wrapper-suffix h-9 flex-1">
+                                          <input 
+                                            type="text" 
+                                            inputMode="decimal"
+                                            placeholder="Berat..."
+                                            value={
+                                              editMealWeight[meal.id] !== undefined 
+                                                ? editMealWeight[meal.id] 
+                                                : parseFloat(meal.weight_g)
+                                            }
+                                            onChange={e => {
+                                              const valStr = e.target.value;
+                                              setEditMealWeight(prev => ({ ...prev, [meal.id]: valStr }));
+                                            }}
+                                          />
+                                          <span>gram</span>
+                                        </div>
+                                        <Button
+                                          type="primary"
+                                          size="small"
+                                          loading={updatingMealId === meal.id}
+                                          onClick={() => handleSaveMealEdit(meal)}
+                                          className="h-9 text-[11px] px-3 font-semibold rounded-lg"
+                                        >
+                                          Simpan
+                                        </Button>
                                       </div>
-                                      <Button
-                                        type="primary"
+                                    </div>
+
+                                    <div className="flex flex-col gap-1.5">
+                                      <label className="text-[10px] text-secondary font-semibold">Pindahkan Waktu Makan:</label>
+                                      <Segmented
+                                        options={[
+                                          { value: 'Makan Pagi', label: <div className="flex items-center gap-1 justify-center py-0.5"><Coffee className="w-3.5 h-3.5 shrink-0" /> <span>Pagi</span></div> },
+                                          { value: 'Makan Siang', label: <div className="flex items-center gap-1 justify-center py-0.5"><Sun className="w-3.5 h-3.5 shrink-0" /> <span>Siang</span></div> },
+                                          { value: 'Makan Malam', label: <div className="flex items-center gap-1 justify-center py-0.5"><Moon className="w-3.5 h-3.5 shrink-0" /> <span>Malam</span></div> },
+                                          { value: 'Camilan', label: <div className="flex items-center gap-1 justify-center py-0.5"><Apple className="w-3.5 h-3.5 shrink-0" /> <span>Camilan</span></div> }
+                                        ]}
+                                        value={editMealTime[meal.id] !== undefined ? editMealTime[meal.id] : (meal.meal_time || 'Camilan')}
+                                        onChange={value => setEditMealTime(prev => ({ ...prev, [meal.id]: value }))}
+                                        block
                                         size="small"
-                                        loading={updatingMealId === meal.id}
-                                        onClick={() => handleSaveMealEdit(meal)}
-                                        className="h-9 text-[11px] px-3 font-semibold rounded-lg"
-                                      >
-                                        Simpan
-                                      </Button>
+                                        className="bg-black/20 border border-white/5 text-[10px] rounded-lg"
+                                      />
                                     </div>
                                   </div>
 
@@ -4167,15 +4269,7 @@ export default function Home() {
                         >
                           <div className="flex justify-between items-center w-full">
                             <span className="font-semibold text-slate-200 text-xs">{item.name}, {Math.round(parseFloat(item.calories))} kcal</span>
-                            {item.user_id && (
-                              <button 
-                                type="button" 
-                                onClick={(e) => { e.stopPropagation(); handleDeleteFoodItem(item.id); }}
-                                className="text-muted hover:text-rose-400 p-1 rounded transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
+
                           </div>
                           
                           <div 
@@ -4273,15 +4367,25 @@ export default function Home() {
                                     </Upload>
                                   )}
                                 </div>
-
-                                <Button 
-                                  type="primary" 
-                                  loading={submittingMeal}
-                                  onClick={(e) => { e.preventDefault(); handleAddMealLog(); }}
-                                  className="h-9 text-xs font-semibold mt-1"
-                                >
-                                  Catat Makanan
-                                </Button>
+                                <div className="flex gap-2 mt-1 w-full">
+                                  {item.user_id && (
+                                    <Button 
+                                      type="default"
+                                      onClick={(e) => { e.preventDefault(); handleStartEditFoodItem(item); }}
+                                      className="h-9 text-xs flex-1 border-white/10 text-slate-300 hover:text-slate-200"
+                                    >
+                                      Edit Pustaka
+                                    </Button>
+                                  )}
+                                  <Button 
+                                    type="primary" 
+                                    loading={submittingMeal}
+                                    onClick={(e) => { e.preventDefault(); handleAddMealLog(); }}
+                                    className={`h-9 text-xs font-semibold ${item.user_id ? 'flex-1' : 'w-full'}`}
+                                  >
+                                    Catat Makanan
+                                  </Button>
+                                </div>
                               </div>
                             )}
                           </div>
@@ -4942,6 +5046,116 @@ export default function Home() {
                 Reset ke Target Profil Default
               </Button>
             )}
+          </div>
+        </form>
+      </Modal>
+
+      {/* 7. Edit Food Library Item Modal */}
+      <Modal
+        title={<span className="text-base font-bold text-gradient-purple">Ubah Makanan Pustaka</span>}
+        open={showEditFoodModal}
+        onCancel={() => {
+          setShowEditFoodModal(false);
+          setEditFoodForm({ id: null, name: '', calories: '', protein: '', carbs: '', fat: '', servingG: 100 });
+        }}
+        footer={null}
+        width={360}
+        centered
+        styles={{
+          mask: {
+            backdropFilter: 'blur(4px)',
+          },
+          content: {
+            background: '#0a0d1d',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '20px',
+          }
+        }}
+      >
+        <form onSubmit={handleSaveEditFoodItem} className="flex flex-col gap-3.5 pt-2 text-left">
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-secondary font-medium">Nama Makanan</label>
+            <Input 
+              placeholder="Contoh: Dada Ayam Rebus" 
+              value={editFoodForm.name}
+              onChange={e => setEditFoodForm({ ...editFoodForm, name: e.target.value })}
+              className="h-10 text-xs bg-white/5 border-white/10 text-slate-100 placeholder:text-slate-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-secondary font-medium">Takaran Saji (gram)</label>
+              <Input 
+                placeholder="Contoh: 100" 
+                value={editFoodForm.servingG}
+                inputMode="decimal"
+                onChange={e => setEditFoodForm({ ...editFoodForm, servingG: e.target.value })}
+                className="h-10 text-xs bg-white/5 border-white/10 text-slate-100 placeholder:text-slate-500"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-secondary font-medium">Kalori (kcal)</label>
+              <Input 
+                placeholder="Contoh: 150" 
+                value={editFoodForm.calories}
+                inputMode="decimal"
+                onChange={e => setEditFoodForm({ ...editFoodForm, calories: e.target.value })}
+                className="h-10 text-xs bg-white/5 border-white/10 text-slate-100 placeholder:text-slate-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-secondary font-medium">Protein (g)</label>
+              <Input 
+                placeholder="0" 
+                value={editFoodForm.protein}
+                inputMode="decimal"
+                onChange={e => setEditFoodForm({ ...editFoodForm, protein: e.target.value })}
+                className="h-10 text-xs bg-white/5 border-white/10 text-slate-100 placeholder:text-slate-500"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-secondary font-medium">Karbo (g)</label>
+              <Input 
+                placeholder="0" 
+                value={editFoodForm.carbs}
+                inputMode="decimal"
+                onChange={e => setEditFoodForm({ ...editFoodForm, carbs: e.target.value })}
+                className="h-10 text-xs bg-white/5 border-white/10 text-slate-100 placeholder:text-slate-500"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-secondary font-medium">Lemak (g)</label>
+              <Input 
+                placeholder="0" 
+                value={editFoodForm.fat}
+                inputMode="decimal"
+                onChange={e => setEditFoodForm({ ...editFoodForm, fat: e.target.value })}
+                className="h-10 text-xs bg-white/5 border-white/10 text-slate-100 placeholder:text-slate-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 mt-2">
+            <Button 
+              type="primary" 
+              htmlType="submit" 
+              loading={submittingEditFood}
+              className="h-11 text-xs font-semibold"
+            >
+              Simpan Perubahan
+            </Button>
+            <Button 
+              danger
+              type="primary" 
+              onClick={() => handleDeleteFoodItem(editFoodForm.id)}
+              className="h-11 text-xs font-semibold bg-rose-600 hover:bg-rose-500 border-none"
+            >
+              Hapus Makanan Pustaka
+            </Button>
           </div>
         </form>
       </Modal>

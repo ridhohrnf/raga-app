@@ -94,7 +94,7 @@ export async function PUT(request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id, weight_g, calories, protein, carbs, fat } = await request.json();
+    const { id, weight_g, calories, protein, carbs, fat, meal_time } = await request.json();
 
     if (!id || !weight_g) {
       return NextResponse.json({ error: 'ID makanan dan berat wajib diisi' }, { status: 400 });
@@ -107,7 +107,8 @@ export async function PUT(request) {
           calories = ${calories || 0}, 
           protein = ${protein || 0}, 
           carbs = ${carbs || 0}, 
-          fat = ${fat || 0}
+          fat = ${fat || 0},
+          meal_time = ${meal_time || 'Camilan'}
       WHERE id = ${id} AND user_id = ${user.id}
       RETURNING *
     `;

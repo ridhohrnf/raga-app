@@ -46,7 +46,7 @@ import {
   ReferenceLine
 } from 'recharts';
 import confetti from 'canvas-confetti';
-import { ConfigProvider, theme, DatePicker, Select, Button, Input, InputNumber, Upload, Modal, message, Segmented } from 'antd';
+import { ConfigProvider, theme, DatePicker, Select, Button, Input, InputNumber, Upload, Modal, Segmented, App } from 'antd';
 import dayjs from 'dayjs';
 import 'dayjs/locale/id'; // Indonesian locale for Day.js
 
@@ -161,7 +161,18 @@ const parseIndonesianFloatWithDefault = (val, def = 0) => {
   return isNaN(parsed) ? def : parsed;
 };
 
+const getSectorPath = (cx, cy, r, startAngle, endAngle) => {
+  const startRad = (startAngle - 90) * Math.PI / 180;
+  const endRad = (endAngle - 90) * Math.PI / 180;
+  const x1 = cx + r * Math.cos(startRad);
+  const y1 = cy + r * Math.sin(startRad);
+  const x2 = cx + r * Math.cos(endRad);
+  const y2 = cy + r * Math.sin(endRad);
+  return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2} Z`;
+};
+
 export default function Home() {
+  const { message, modal } = App.useApp();
   // Authentication & Global State
   const [user, setUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -196,6 +207,7 @@ export default function Home() {
   
   // Data State
   const [workouts, setWorkouts] = useState([]);
+  const [isInitialDataLoaded, setIsInitialDataLoaded] = useState(false);
   const [exercisesList, setExercisesList] = useState([
     { name: 'Bench Press', category: 'Chest' },
     { name: 'Incline Dumbbell Press', category: 'Chest' },
@@ -218,6 +230,7 @@ export default function Home() {
   
   // Active Workout Tracking
   const [activeWorkout, setActiveWorkout] = useState(null);
+  const [isWorkoutRestored, setIsWorkoutRestored] = useState(false);
   const [showExerciseSelector, setShowExerciseSelector] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -564,7 +577,7 @@ export default function Home() {
   };
 
   const handleDeleteMealLog = async (id) => {
-    Modal.confirm({
+    modal.confirm({
       title: 'Hapus Catatan Makanan?',
       content: 'Apakah Anda yakin ingin menghapus catatan makanan ini dari diary harian?',
       okText: 'Hapus',
@@ -936,7 +949,7 @@ export default function Home() {
   };
 
   const handleDeleteFoodItem = async (id) => {
-    Modal.confirm({
+    modal.confirm({
       title: 'Hapus Makanan dari Pustaka?',
       content: 'Apakah Anda yakin ingin menghapus makanan ini dari pustaka kustom Anda?',
       okText: 'Hapus',
@@ -1004,27 +1017,71 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [loadingProgress, authChecked]);
 
-  useEffect(() => {
-    if (user) {
-      fetchWorkouts();
-      fetchAnalytics();
-      fetchGallery();
-      fetchActivities();
-      fetchLoggedMeals(nutritionDate);
-      fetchFoodLibrary();
-      fetchDailyTarget(nutritionDate);
-      fetchTemplates();
-      // Extract unique exercises from DB workouts if any to populate selection list
-      updateExercisesList();
+  const fetchInitialData = async (dateVal) => {
+    try {
+      const targetDate = dateVal || nutritionDate;
+      const res = await fetch(`/api/init-data?date=${targetDate}`);
+      if (res.ok) {
+        const data = await res.json();
+        setWorkouts(data.workouts || []);
+        setTemplates(data.templates || []);
+        setFoodLibrary(data.foodLibrary || []);
+        setActivities(data.activities || []);
+        setDailyTarget(data.dailyTarget || null);
+        setLoggedMeals(data.loggedMeals || []);
+        setGalleryImages(data.images || []);
+        setAnalyticsData(data.analytics || null);
+        setIsInitialDataLoaded(true);
+      }
+    } catch (e) {
+      console.error('Error fetching initial batch data:', e);
     }
-  }, [user]);
+  };
 
   useEffect(() => {
     if (user) {
+      fetchInitialData(nutritionDate);
+    }
+  }, [user]);
+
+  // Load saved active workout from localStorage on user login / mount
+  useEffect(() => {
+    if (user) {
+      const savedWorkout = localStorage.getItem('raga_active_workout');
+      if (savedWorkout) {
+        try {
+          const parsed = JSON.parse(savedWorkout);
+          if (parsed) {
+            setActiveWorkout(parsed);
+            setActiveTab('workout');
+          }
+        } catch (e) {
+          console.error('Error parsing saved active workout:', e);
+        }
+      }
+      setIsWorkoutRestored(true);
+    } else {
+      setIsWorkoutRestored(false);
+    }
+  }, [user]);
+
+  // Save active workout to localStorage whenever there's a change (after session is restored)
+  useEffect(() => {
+    if (!isWorkoutRestored) return;
+
+    if (activeWorkout) {
+      localStorage.setItem('raga_active_workout', JSON.stringify(activeWorkout));
+    } else {
+      localStorage.removeItem('raga_active_workout');
+    }
+  }, [activeWorkout, isWorkoutRestored]);
+
+  useEffect(() => {
+    if (user && isInitialDataLoaded) {
       fetchLoggedMeals(nutritionDate);
       fetchDailyTarget(nutritionDate);
     }
-  }, [user, nutritionDate]);
+  }, [user, nutritionDate, isInitialDataLoaded]);
 
   const checkAuth = async () => {
     try {
@@ -1115,7 +1172,7 @@ export default function Home() {
   };
 
   const handleResetDailyTarget = async () => {
-    Modal.confirm({
+    modal.confirm({
       title: 'Kembalikan Target ke Default?',
       content: 'Apakah Anda yakin ingin mengembalikan target harian ke target default profil?',
       okText: 'Ya, Reset',
@@ -1200,7 +1257,7 @@ export default function Home() {
   };
 
   const handleDeleteTemplate = async (id) => {
-    Modal.confirm({
+    modal.confirm({
       title: 'Hapus Rencana Latihan?',
       content: 'Apakah Anda yakin ingin menghapus rencana latihan ini secara permanen?',
       okText: 'Hapus',
@@ -1533,6 +1590,8 @@ export default function Home() {
       setActiveTab('dashboard');
       setActiveWorkout(null);
       setActivities([]);
+      setIsWorkoutRestored(false);
+      setIsInitialDataLoaded(false);
     } catch (e) {
       console.error('Logout error:', e);
     }
@@ -1614,7 +1673,7 @@ export default function Home() {
   };
 
   const handleDeleteActivity = async (id) => {
-    Modal.confirm({
+    modal.confirm({
       title: 'Hapus Aktivitas Harian?',
       content: 'Apakah Anda yakin ingin menghapus data langkah dan kalori aktivitas ini?',
       okText: 'Hapus',
@@ -1645,8 +1704,8 @@ export default function Home() {
 
   const getWorkoutDaysThisWeek = () => {
     if (!workouts || workouts.length === 0) return 0;
-    const startOfWeek = dayjs().startOf('week');
-    const endOfWeek = dayjs().endOf('week');
+    const startOfWeek = dayjs().locale('en').startOf('week');
+    const endOfWeek = dayjs().locale('en').endOf('week');
     
     const uniqueDates = new Set();
     workouts.forEach(w => {
@@ -1662,8 +1721,8 @@ export default function Home() {
 
   const getWeeklyVolume = () => {
     if (!workouts || workouts.length === 0) return 0;
-    const startOfWeek = dayjs().startOf('week');
-    const endOfWeek = dayjs().endOf('week');
+    const startOfWeek = dayjs().locale('en').startOf('week');
+    const endOfWeek = dayjs().locale('en').endOf('week');
     
     let totalVolume = 0;
     workouts.forEach(w => {
@@ -1685,8 +1744,8 @@ export default function Home() {
 
   const getWeeklyWorkoutsCount = () => {
     if (!workouts || workouts.length === 0) return 0;
-    const startOfWeek = dayjs().startOf('week');
-    const endOfWeek = dayjs().endOf('week');
+    const startOfWeek = dayjs().locale('en').startOf('week');
+    const endOfWeek = dayjs().locale('en').endOf('week');
     
     let count = 0;
     workouts.forEach(w => {
@@ -1712,10 +1771,10 @@ export default function Home() {
       Core: 'Inti/Perut'
     };
 
-    const startOfWeek = dayjs().startOf('week');
-    const endOfWeek = dayjs().endOf('week');
-    const startOfLastWeek = dayjs().subtract(1, 'week').startOf('week');
-    const endOfLastWeek = dayjs().subtract(1, 'week').endOf('week');
+    const startOfWeek = dayjs().locale('en').startOf('week');
+    const endOfWeek = dayjs().locale('en').endOf('week');
+    const startOfLastWeek = dayjs().locale('en').subtract(1, 'week').startOf('week');
+    const endOfLastWeek = dayjs().locale('en').subtract(1, 'week').endOf('week');
 
     // Initialize counts
     const thisWeekSets = {};
@@ -1737,7 +1796,35 @@ export default function Home() {
         w.exercises?.forEach(ex => {
           let cat = ex.category;
           if (cat) {
-            cat = cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase();
+            const normalizedCat = cat.toLowerCase().trim();
+            const exName = (ex.name || '').toLowerCase();
+            
+            if (normalizedCat === 'chest' || normalizedCat === 'dada') {
+              cat = 'Chest';
+            } else if (normalizedCat === 'back' || normalizedCat === 'punggung') {
+              cat = 'Back';
+            } else if (normalizedCat === 'leg' || normalizedCat === 'kaki') {
+              cat = 'Leg';
+            } else if (normalizedCat === 'shoulder' || normalizedCat === 'bahu') {
+              cat = 'Shoulder';
+            } else if (normalizedCat === 'bicep' || normalizedCat === 'bisep' || normalizedCat === 'lengan depan') {
+              cat = 'Bicep';
+            } else if (normalizedCat === 'tricep' || normalizedCat === 'trisep' || normalizedCat === 'lengan belakang') {
+              cat = 'Tricep';
+            } else if (normalizedCat === 'core' || normalizedCat === 'inti/perut' || normalizedCat === 'inti') {
+              cat = 'Core';
+            } else if (normalizedCat === 'lengan') {
+              // Distinguish based on exercise name
+              if (exName.includes('bicep') || exName.includes('curl')) {
+                cat = 'Bicep';
+              } else if (exName.includes('tricep') || exName.includes('pushdown') || exName.includes('extension')) {
+                cat = 'Tricep';
+              } else {
+                cat = 'Bicep'; // fallback
+              }
+            } else {
+              cat = cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase();
+            }
           }
           if (categories.includes(cat)) {
             ex.sets?.forEach(s => {
@@ -2081,7 +2168,7 @@ export default function Home() {
   };
 
   const cancelActiveWorkout = () => {
-    Modal.confirm({
+    modal.confirm({
       title: 'Batalkan Sesi Latihan?',
       content: 'Semua progres latihan yang sedang berjalan dan belum disimpan akan terhapus.',
       okText: 'Ya, Batalkan',
@@ -2095,7 +2182,7 @@ export default function Home() {
   };
 
   const deleteWorkout = async (id) => {
-    Modal.confirm({
+    modal.confirm({
       title: 'Hapus Sesi Latihan?',
       content: 'Apakah Anda yakin ingin menghapus sesi latihan ini secara permanen dari riwayat Anda?',
       okText: 'Hapus',
@@ -2163,7 +2250,7 @@ export default function Home() {
   };
 
   const deleteImage = async (id) => {
-    Modal.confirm({
+    modal.confirm({
       title: 'Hapus Foto Progres?',
       content: 'Apakah Anda yakin ingin menghapus foto progres ini secara permanen?',
       okText: 'Hapus',
@@ -2568,7 +2655,6 @@ export default function Home() {
         {/* ==================== TAB 1: DASHBOARD ==================== */}
         {activeTab === 'dashboard' && (
           <div className="flex flex-col gap-5 animate-slide-up">
-            
             {/* Highlight Banner: Days Work out this week */}
             <div className="glass-card bg-purple-glow border-purple/30 p-5 text-center">
               <span className="text-xs font-bold text-purple block tracking-wide uppercase">Konsistensi Mingguan</span>
@@ -2576,110 +2662,6 @@ export default function Home() {
                 🔥 Kamu sudah latihan <span className="text-gradient-purple font-black text-2xl">{getWorkoutDaysThisWeek()}</span> hari minggu ini!
               </h2>
             </div>
-
-            {/* Onboarding Guide Card for New Users */}
-            {(!user.weight || !user.height || !user.age || workouts.length === 0) && (
-              <div className="glass-card border-purple/30 bg-purple-glow/10 flex flex-col gap-4 p-5 animate-pop-in">
-                <div className="flex items-center gap-2 border-b border-white/5 pb-3">
-                  <Sparkles className="text-purple w-5 h-5 animate-pulse shrink-0" />
-                  <div className="text-left">
-                    <h3 className="text-sm font-bold m-0 text-slate-100">🚀 Panduan Memulai Raga</h3>
-                    <p className="text-[10px] text-muted m-0 mt-0.5">Langkah mudah untuk mulai melacak latihan dan kalori harian Anda.</p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-4 text-left">
-                  {/* Step 1 */}
-                  <div className="flex gap-3 items-start">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
-                      (user.weight && user.height && user.age) 
-                        ? 'bg-success text-white' 
-                        : 'bg-white/10 text-secondary'
-                    }`}>
-                      {(user.weight && user.height && user.age) ? <Check className="w-3.5 h-3.5" /> : "1"}
-                    </div>
-                    <div className="flex-1">
-                      <span className={`text-xs font-bold block ${
-                        (user.weight && user.height && user.age) ? 'text-muted line-through' : 'text-slate-200'
-                      }`}>
-                        Lengkapi Profil Fisik & Target Kalori
-                      </span>
-                      <p className="text-[10px] text-muted m-0 mt-0.5 font-normal">
-                        Masukkan berat badan, tinggi badan, umur, dan aktivitas untuk menghitung kebutuhan kalori dan TDEE Anda.
-                      </p>
-                      {!(user.weight && user.height && user.age) && (
-                        <Button 
-                          type="primary" 
-                          size="small" 
-                          onClick={() => setShowProfileModal(true)}
-                          className="text-[10px] font-bold h-7 px-3 mt-2"
-                        >
-                          Lengkapi Profil
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Step 2 */}
-                  <div className="flex gap-3 items-start">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
-                      user.workout_program 
-                        ? 'bg-success text-white' 
-                        : 'bg-white/10 text-secondary'
-                    }`}>
-                      {user.workout_program ? <Check className="w-3.5 h-3.5" /> : "2"}
-                    </div>
-                    <div className="flex-1">
-                      <span className="text-xs font-bold block text-slate-200">
-                        Atur Program Latihan (Workout Split)
-                      </span>
-                      <p className="text-[10px] text-muted m-0 mt-0.5 font-normal">
-                        Tentukan program split latihan Anda (saat ini: <strong>{user.workout_program || 'Upper, Lower'}</strong>).
-                      </p>
-                      <Button 
-                        type="dashed" 
-                        size="small" 
-                        onClick={() => setShowProfileModal(true)}
-                        className="text-[10px] font-bold h-7 px-3 mt-2 text-purple border-purple/30"
-                      >
-                        Atur Program Split
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Step 3 */}
-                  <div className="flex gap-3 items-start">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
-                      workouts.length > 0 
-                        ? 'bg-success text-white' 
-                        : 'bg-white/10 text-secondary'
-                    }`}>
-                      {workouts.length > 0 ? <Check className="w-3.5 h-3.5" /> : "3"}
-                    </div>
-                    <div className="flex-1">
-                      <span className={`text-xs font-bold block ${
-                        workouts.length > 0 ? 'text-muted line-through' : 'text-slate-200'
-                      }`}>
-                        Mulai Latihan Pertama Anda
-                      </span>
-                      <p className="text-[10px] text-muted m-0 mt-0.5 font-normal">
-                        Mulai sesi latihan kustom atau pilih dari split program (contoh: Upper/Lower) yang sudah diatur.
-                      </p>
-                      {workouts.length === 0 && (
-                        <Button 
-                          type="primary" 
-                          size="small" 
-                          onClick={startNewWorkout}
-                          className="text-[10px] font-bold h-7 px-3 mt-2"
-                        >
-                          Mulai Latihan Baru
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Calorie & Macro Target Card */}
             {(() => {
@@ -2843,6 +2825,368 @@ export default function Home() {
               </Button>
             )}
 
+            {/* Chart: Tren Diet & Kalori (7 Hari Terakhir) */}
+            {analyticsData?.nutritionTrend?.length > 0 && (
+              <div className="glass-card">
+                <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-primary m-0">Tren Asupan Kalori Harian</h3>
+                    <p className="text-[10px] text-muted mt-0.5 mb-0">Konsumsi Kalori vs Target (7 Hari Terakhir)</p>
+                  </div>
+                  <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-medium">
+                    Diet Chart
+                  </span>
+                </div>
+                <div className="w-full h-48">
+                  {(() => {
+                    const targets = calculateCalorieTargets();
+                    return (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={analyticsData.nutritionTrend}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                          <XAxis dataKey="label" stroke="var(--text-muted)" fontSize={10} tickLine={false} />
+                          <YAxis stroke="var(--text-muted)" fontSize={10} tickLine={false} />
+                          <Tooltip 
+                            contentStyle={{ 
+                              background: 'rgba(13, 17, 33, 0.95)', 
+                              borderColor: 'var(--border-glass)',
+                              borderRadius: '12px',
+                              color: '#fff',
+                              fontSize: '11px'
+                            }} 
+                            formatter={(value) => [`${value} kcal`, 'Asupan']}
+                          />
+                          <Bar dataKey="calories" name="Kalori" fill="#2997ff" radius={[4, 4, 0, 0]} />
+                          {targets.targetCalories > 0 && (
+                            <ReferenceLine 
+                              y={targets.targetCalories} 
+                              stroke="#ff453a" 
+                              strokeDasharray="4 4" 
+                              label={{ 
+                                value: `Target: ${targets.targetCalories} kcal`, 
+                                fill: '#ff453a', 
+                                position: 'top',
+                                fontSize: 9,
+                                fontWeight: 'bold'
+                              }} 
+                            />
+                          )}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* Radar Chart: Muscle Volume Distribution (Sets per Week) */}
+            {(() => {
+              const { chartData, thisWeekSets, lastWeekSets } = getMuscleGroupStats();
+              const hasData = chartData.some(d => d['Minggu Ini'] > 0 || d['Minggu Lalu'] > 0);
+              const categories = ['Chest', 'Back', 'Leg', 'Shoulder', 'Bicep', 'Tricep', 'Core'];
+              const labelMap = {
+                Chest: 'Dada',
+                Back: 'Punggung',
+                Leg: 'Kaki',
+                Shoulder: 'Bahu',
+                Bicep: 'Bisep',
+                Tricep: 'Trisep',
+                Core: 'Inti/Perut'
+              };
+              const maxVal = Math.max(
+                10,
+                ...chartData.map(d => Math.max(d['Minggu Ini'] || 0, d['Minggu Lalu'] || 0))
+              );
+              const colors = {
+                Chest: '#2997ff',
+                Back: '#30d158',
+                Leg: '#bf5af2',
+                Shoulder: '#ff9f0a',
+                Bicep: '#ff375f',
+                Tricep: '#64d2ff',
+                Core: '#ffd60a'
+              };
+              
+              return (
+                <div className="glass-card flex flex-col gap-4">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <div>
+                      <h3 className="text-xs font-bold text-gradient-purple uppercase tracking-wider m-0">Rating Stimulus Otot</h3>
+                      <p className="text-[10px] text-muted mt-0.5 mb-0">Pembagian Volume Set per Otot (Mingguan)</p>
+                    </div>
+                    <span className="text-[9px] bg-purple-glow text-purple border border-purple/20 px-2 py-0.5 rounded-full font-medium">
+                      Rose Chart
+                    </span>
+                  </div>
+
+                  <div className="w-full h-72 flex items-center justify-center">
+                    {hasData ? (
+                      <div className="flex flex-col items-center">
+                        <svg width={280} height={280} viewBox="0 0 280 280" className="overflow-visible">
+                          {/* 1. Grid Circles */}
+                          {[0.25, 0.5, 0.75, 1.0].map((pct, idx) => {
+                            const r = pct * 85;
+                            const gridVal = Math.round(pct * maxVal);
+                            return (
+                              <g key={idx}>
+                                <circle cx={140} cy={140} r={r} fill="none" stroke="rgba(255, 255, 255, 0.08)" strokeDasharray="3 3" />
+                                <text x={140} y={140 - r + 9} fill="rgba(255, 255, 255, 0.25)" fontSize={7.5} fontWeight="bold" textAnchor="middle">
+                                  {gridVal}
+                                </text>
+                              </g>
+                            );
+                          })}
+                          
+                          {/* 2. Radial spokes & Wedges */}
+                          {chartData.map((d, i) => {
+                            const startAngle = i * 51.43;
+                            const endAngle = (i + 1) * 51.43;
+                            const midAngle = startAngle + 25.71;
+                            
+                            const valThisWeek = d['Minggu Ini'] || 0;
+                            const valLastWeek = d['Minggu Lalu'] || 0;
+                            
+                            const rThisWeek = Math.max(8, (valThisWeek / maxVal) * 85);
+                            const rLastWeek = Math.max(8, (valLastWeek / maxVal) * 85);
+                            
+                            const radMid = (midAngle - 90) * Math.PI / 180;
+                            const cosVal = Math.cos(radMid);
+                            const sinVal = Math.sin(radMid);
+                            
+                            const xSpoke = 140 + 85 * cosVal;
+                            const ySpoke = 140 + 85 * sinVal;
+                            
+                            const rLabel = 85 + 18;
+                            const xLabel = 140 + rLabel * cosVal;
+                            const yLabel = 140 + rLabel * sinVal;
+                            
+                            const textAnchor = cosVal > 0.1 ? 'start' : cosVal < -0.1 ? 'end' : 'middle';
+                            const dy = sinVal > 0.5 ? '0.7em' : sinVal < -0.5 ? '-0.2em' : '0.35em';
+                            
+                            const rNum = rThisWeek > 25 ? rThisWeek - 11 : rThisWeek + 9;
+                            const numColor = rThisWeek > 25 ? '#ffffff' : 'var(--text-secondary)';
+                            const xNum = 140 + rNum * cosVal;
+                            const yNum = 140 + rNum * sinVal;
+                            
+                            const sectorColor = colors[d.category] || '#2997ff';
+                            
+                            return (
+                              <g key={d.category}>
+                                {/* Spoke line */}
+                                <line x1={140} y1={140} x2={xSpoke} y2={ySpoke} stroke="rgba(255, 255, 255, 0.05)" />
+                                
+                                {/* Last Week Wedge (Behind) */}
+                                <path 
+                                  d={getSectorPath(140, 140, rLastWeek, startAngle, endAngle)} 
+                                  fill="rgba(134, 134, 139, 0.12)" 
+                                  stroke="rgba(134, 134, 139, 0.35)" 
+                                  strokeWidth={0.8}
+                                  strokeDasharray="3 2"
+                                />
+                                
+                                {/* This Week Wedge (Front) */}
+                                <path 
+                                  d={getSectorPath(140, 140, rThisWeek, startAngle, endAngle)} 
+                                  fill={sectorColor} 
+                                  fillOpacity={0.45} 
+                                  stroke={sectorColor} 
+                                  strokeWidth={1.2}
+                                />
+                                
+                                {/* Label */}
+                                <text 
+                                  x={xLabel} 
+                                  y={yLabel} 
+                                  fill="var(--text-secondary)" 
+                                  fontSize={9.5} 
+                                  fontWeight="600" 
+                                  textAnchor={textAnchor}
+                                  dy={dy}
+                                >
+                                  {d.subject}
+                                </text>
+                                
+                                {/* Value Number */}
+                                <text 
+                                  x={xNum} 
+                                  y={yNum} 
+                                  fill={numColor} 
+                                  fontSize={9.5} 
+                                  fontWeight="bold" 
+                                  textAnchor="middle" 
+                                  dy="0.35em"
+                                  style={{ textShadow: rThisWeek > 25 ? '0 1px 3px rgba(0,0,0,0.8)' : 'none' }}
+                                >
+                                  {valThisWeek}
+                                </text>
+                              </g>
+                            );
+                          })}
+                        </svg>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-xs text-muted">Belum ada data set latihan untuk minggu ini dan minggu lalu.</div>
+                    )}
+                  </div>
+
+                  {/* Custom Legend */}
+                  {hasData && (
+                    <div className="flex gap-4 justify-center text-[10px] border-t border-white/5 pt-3 -mt-1 w-full">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2.5 h-2.5 bg-purple/40 border border-purple rounded-sm"></div>
+                        <span className="text-secondary">Minggu Ini</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2.5 h-2.5 bg-white/10 border border-slate-500/40 border-dashed rounded-sm"></div>
+                        <span className="text-secondary">Minggu Lalu</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Chart: Workout Weekly Volume Trend */}
+            <div className="glass-card">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-sm font-semibold text-primary">Volume Latihan Mingguan</h3>
+                <span className="text-[10px] bg-cyan-glow text-cyan-400 border border-cyan/20 px-2 py-0.5 rounded-full font-medium">
+                  Trend (Set)
+                </span>
+              </div>
+              <div className="w-full h-48">
+                {analyticsData?.weeklyTrend?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analyticsData.weeklyTrend}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="weekLabel" stroke="var(--text-muted)" fontSize={10} tickLine={false} />
+                      <YAxis stroke="var(--text-muted)" fontSize={10} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ 
+                          background: 'rgba(13, 17, 33, 0.95)', 
+                          borderColor: 'var(--border-glass)',
+                          borderRadius: '12px',
+                          color: '#fff',
+                          fontSize: '11px'
+                        }} 
+                      />
+                      <Bar dataKey="totalVolume" name="Volume (Set)" fill="var(--info)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-xs text-muted">Belum ada data latihan.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Chart: Frequency (Sessions per Week) */}
+            <div className="glass-card">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-sm font-semibold text-primary">Frekuensi Latihan</h3>
+                <span className="text-[10px] bg-purple-glow text-purple border border-purple/20 px-2 py-0.5 rounded-full font-medium">
+                  Sesi / Minggu
+                </span>
+              </div>
+              <div className="w-full h-48">
+                {analyticsData?.weeklyTrend?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={analyticsData.weeklyTrend}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="weekLabel" stroke="var(--text-muted)" fontSize={10} tickLine={false} />
+                      <YAxis stroke="var(--text-muted)" fontSize={10} tickLine={false} allowDecimals={false} />
+                      <Tooltip 
+                        contentStyle={{ 
+                          background: 'rgba(13, 17, 33, 0.95)', 
+                          borderColor: 'var(--border-glass)',
+                          borderRadius: '12px',
+                          color: '#fff',
+                          fontSize: '11px'
+                        }} 
+                      />
+                      <Line type="monotone" dataKey="workoutsCount" name="Sesi" stroke="var(--primary)" strokeWidth={2} dot={{ fill: 'var(--primary)', r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-xs text-muted">Belum ada data latihan.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Pencapaian Volume Set (Target Min. 10 Set) */}
+            {(() => {
+              const { chartData, thisWeekSets } = getMuscleGroupStats();
+              const hasData = chartData.some(d => d['Minggu Ini'] > 0 || d['Minggu Lalu'] > 0);
+              if (!hasData) return null;
+              
+              const categories = ['Chest', 'Back', 'Leg', 'Shoulder', 'Bicep', 'Tricep', 'Core'];
+              const labelMap = {
+                Chest: 'Dada',
+                Back: 'Punggung',
+                Leg: 'Kaki',
+                Shoulder: 'Bahu',
+                Bicep: 'Bisep',
+                Tricep: 'Trisep',
+                Core: 'Inti/Perut'
+              };
+
+              return (
+                <div className="glass-card flex flex-col gap-4">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <div>
+                      <h3 className="text-xs font-bold text-gradient-purple uppercase tracking-wider m-0">Pencapaian Volume Set</h3>
+                      <p className="text-[10px] text-muted mt-0.5 mb-0">Target Minimal 10 Set per Otot (Mingguan)</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2.5">
+                    {categories.map(cat => {
+                      const count = thisWeekSets[cat] || 0;
+                      const target = 10;
+                      const pct = Math.min(100, Math.round((count / target) * 100));
+                      
+                      return (
+                        <div key={cat} className="flex flex-col gap-1">
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="font-semibold text-slate-300">{labelMap[cat]}</span>
+                            <span className="text-muted font-bold">{count} / {target} set</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5">
+                            <div 
+                              className="h-full rounded-full transition-all duration-500" 
+                              style={{ 
+                                width: `${pct}%`, 
+                                backgroundColor: pct >= 100 ? '#30d158' : '#2997ff' 
+                              }}
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Your Latest Achievement */}
+            {getLatestAchievements().length > 0 && (
+              <div className="glass-card border-l-4 border-l-emerald-400 flex flex-col gap-3">
+                <div className="flex items-center gap-1.5 border-b border-white/5 pb-2">
+                  <Sparkles className="text-emerald-400 w-4 h-4" />
+                  <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider m-0">Your Latest Achievement</h3>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {getLatestAchievements().map((ach, idx) => (
+                    <div key={ach.id || idx} className="flex flex-col bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-2.5">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-xs text-slate-200">{ach.exercise}</span>
+                        <span className="text-xs font-bold text-emerald-400">{ach.diff} ({ach.type})</span>
+                      </div>
+                      <p className="text-[10px] text-muted mt-1 mb-0 leading-normal">{ach.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Daily Activities Logger */}
             <div className="glass-card flex flex-col gap-4">
               <div className="flex justify-between items-center border-b border-white/5 pb-2">
@@ -2918,291 +3262,106 @@ export default function Home() {
               )}
             </div>
 
-            {/* Your Latest Achievement */}
-            {getLatestAchievements().length > 0 && (
-              <div className="glass-card border-l-4 border-l-emerald-400 flex flex-col gap-3">
-                <div className="flex items-center gap-1.5 border-b border-white/5 pb-2">
-                  <Sparkles className="text-emerald-400 w-4 h-4" />
-                  <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider m-0">Your Latest Achievement</h3>
+            {/* Onboarding Guide Card for New Users */}
+            {(!user.weight || !user.height || !user.age || workouts.length === 0) && (
+              <div className="glass-card border-purple/30 bg-purple-glow/10 flex flex-col gap-4 p-5 animate-pop-in">
+                <div className="flex items-center gap-2 border-b border-white/5 pb-3">
+                  <Sparkles className="text-purple w-5 h-5 animate-pulse shrink-0" />
+                  <div className="text-left">
+                    <h3 className="text-sm font-bold m-0 text-slate-100">🚀 Panduan Memulai Raga</h3>
+                    <p className="text-[10px] text-muted m-0 mt-0.5">Langkah mudah untuk mulai melacak latihan dan kalori harian Anda.</p>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                  {getLatestAchievements().map((ach, idx) => (
-                    <div key={ach.id || idx} className="flex flex-col bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-2.5">
-                      <div className="flex justify-between items-center">
-                        <span className="font-semibold text-xs text-slate-200">{ach.exercise}</span>
-                        <span className="text-xs font-bold text-emerald-400">{ach.diff} ({ach.type})</span>
-                      </div>
-                      <p className="text-[10px] text-muted mt-1 mb-0 leading-normal">{ach.detail}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {/* Chart: Workout Weekly Volume Trend */}
-            <div className="glass-card">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-sm font-semibold text-primary">Volume Latihan Mingguan</h3>
-                <span className="text-[10px] bg-cyan-glow text-cyan-400 border border-cyan/20 px-2 py-0.5 rounded-full font-medium">
-                  Trend (Set)
-                </span>
-              </div>
-              <div className="w-full h-48">
-                {analyticsData?.weeklyTrend?.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={analyticsData.weeklyTrend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                      <XAxis dataKey="weekLabel" stroke="var(--text-muted)" fontSize={10} tickLine={false} />
-                      <YAxis stroke="var(--text-muted)" fontSize={10} tickLine={false} />
-                      <Tooltip 
-                        contentStyle={{ 
-                          background: 'rgba(13, 17, 33, 0.95)', 
-                          borderColor: 'var(--border-glass)',
-                          borderRadius: '12px',
-                          color: '#fff',
-                          fontSize: '11px'
-                        }} 
-                      />
-                      <Bar dataKey="totalVolume" name="Volume (Set)" fill="var(--info)" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-xs text-muted">Belum ada data latihan.</div>
-                )}
-              </div>
-            </div>
-
-            {/* Chart: Frequency (Sessions per Week) */}
-            <div className="glass-card">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-sm font-semibold text-primary">Frekuensi Latihan</h3>
-                <span className="text-[10px] bg-purple-glow text-purple border border-purple/20 px-2 py-0.5 rounded-full font-medium">
-                  Sesi / Minggu
-                </span>
-              </div>
-              <div className="w-full h-48">
-                {analyticsData?.weeklyTrend?.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={analyticsData.weeklyTrend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                      <XAxis dataKey="weekLabel" stroke="var(--text-muted)" fontSize={10} tickLine={false} />
-                      <YAxis stroke="var(--text-muted)" fontSize={10} tickLine={false} allowDecimals={false} />
-                      <Tooltip 
-                        contentStyle={{ 
-                          background: 'rgba(13, 17, 33, 0.95)', 
-                          borderColor: 'var(--border-glass)',
-                          borderRadius: '12px',
-                          color: '#fff',
-                          fontSize: '11px'
-                        }} 
-                      />
-                      <Line type="monotone" dataKey="workoutsCount" name="Sesi" stroke="var(--primary)" strokeWidth={2} dot={{ fill: 'var(--primary)', r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-xs text-muted">Belum ada data latihan.</div>
-                )}
-              </div>
-            </div>            {/* Radar Chart: Muscle Volume Distribution (Sets per Week) */}
-            {(() => {
-              const { chartData, thisWeekSets, lastWeekSets } = getMuscleGroupStats();
-              const hasData = chartData.some(d => d['Minggu Ini'] > 0 || d['Minggu Lalu'] > 0);
-              const categories = ['Chest', 'Back', 'Leg', 'Shoulder', 'Bicep', 'Tricep', 'Core'];
-              const labelMap = {
-                Chest: 'Dada',
-                Back: 'Punggung',
-                Leg: 'Kaki',
-                Shoulder: 'Bahu',
-                Bicep: 'Bisep',
-                Tricep: 'Trisep',
-                Core: 'Inti/Perut'
-              };
-              
-              return (
-                <div className="glass-card flex flex-col gap-4">
-                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                    <div>
-                      <h3 className="text-xs font-bold text-gradient-purple uppercase tracking-wider m-0">Rating Stimulus Otot</h3>
-                      <p className="text-[10px] text-muted mt-0.5 mb-0">Pembagian Volume Set per Otot (Mingguan)</p>
+                <div className="flex flex-col gap-4 text-left">
+                  {/* Step 1 */}
+                  <div className="flex gap-3 items-start">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
+                      (user.weight && user.height && user.age) 
+                        ? 'bg-success text-white' 
+                        : 'bg-white/10 text-secondary'
+                    }`}>
+                      {(user.weight && user.height && user.age) ? <Check className="w-3.5 h-3.5" /> : "1"}
                     </div>
-                    <span className="text-[9px] bg-purple-glow text-purple border border-purple/20 px-2 py-0.5 rounded-full font-medium">
-                      Radar Chart
-                    </span>
+                    <div className="flex-1">
+                      <span className={`text-xs font-bold block ${
+                        (user.weight && user.height && user.age) ? 'text-muted line-through' : 'text-slate-200'
+                      }`}>
+                        Lengkapi Profil Fisik & Target Kalori
+                      </span>
+                      <p className="text-[10px] text-muted m-0 mt-0.5 font-normal">
+                        Masukkan berat badan, tinggi badan, umur, dan aktivitas untuk menghitung kebutuhan kalori dan TDEE Anda.
+                      </p>
+                      {!(user.weight && user.height && user.age) && (
+                        <Button 
+                          type="primary" 
+                          size="small" 
+                          onClick={() => setShowProfileModal(true)}
+                          className="text-[10px] font-bold h-7 px-3 mt-2"
+                        >
+                          Lengkapi Profil
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="w-full h-56 flex items-center justify-center">
-                    {hasData ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
-                          <PolarGrid stroke="rgba(255, 255, 255, 0.08)" />
-                          <PolarAngleAxis 
-                            dataKey="subject" 
-                            tick={{ fill: 'var(--text-secondary)', fontSize: 10, fontWeight: '500' }} 
-                          />
-                          <PolarRadiusAxis 
-                            angle={30} 
-                            domain={[0, 'auto']} 
-                            tick={{ fill: 'rgba(255, 255, 255, 0.4)', fontSize: 8 }}
-                            axisLine={false}
-                          />
-                          <Radar 
-                            name="Minggu Ini" 
-                            dataKey="Minggu Ini" 
-                            stroke="#2997ff" 
-                            fill="#2997ff" 
-                            fillOpacity={0.3} 
-                          />
-                          <Radar 
-                            name="Minggu Lalu" 
-                            dataKey="Minggu Lalu" 
-                            stroke="#86868b" 
-                            fill="#86868b" 
-                            fillOpacity={0.15} 
-                          />
-                          <Tooltip 
-                            contentStyle={{ 
-                              background: 'rgba(13, 17, 33, 0.95)', 
-                              borderColor: 'var(--border-glass)',
-                              borderRadius: '12px',
-                              color: '#fff',
-                              fontSize: '11px'
-                            }} 
-                          />
-                          <Legend 
-                            wrapperStyle={{ fontSize: '10px', marginTop: '10px' }}
-                            iconSize={8}
-                          />
-                        </RadarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-xs text-muted">Belum ada data set latihan untuk minggu ini dan minggu lalu.</div>
-                    )}
+                  {/* Step 2 */}
+                  <div className="flex gap-3 items-start">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
+                      user.workout_program 
+                        ? 'bg-success text-white' 
+                        : 'bg-white/10 text-secondary'
+                    }`}>
+                      {user.workout_program ? <Check className="w-3.5 h-3.5" /> : "2"}
+                    </div>
+                    <div className="flex-1">
+                      <span className="text-xs font-bold block text-slate-200">
+                        Atur Program Latihan (Workout Split)
+                      </span>
+                      <p className="text-[10px] text-muted m-0 mt-0.5 font-normal">
+                        Tentukan program split latihan Anda (saat ini: <strong>{user.workout_program || 'Upper, Lower'}</strong>).
+                      </p>
+                      <Button 
+                        type="dashed" 
+                        size="small" 
+                        onClick={() => setShowProfileModal(true)}
+                        className="text-[10px] font-bold h-7 px-3 mt-2 text-purple border-purple/30"
+                      >
+                        Atur Program Split
+                      </Button>
+                    </div>
                   </div>
 
-                  {/* WoW Progress List */}
-                  {hasData && (
-                    <div className="border-t border-white/5 pt-3 mt-1">
-                      <h4 className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-2">Progresi Otot per Minggu</h4>
-                      <div className="grid grid-cols-2 gap-2">
-                        {chartData.map((data) => {
-                          const current = data['Minggu Ini'];
-                          const prev = data['Minggu Lalu'];
-                          const diff = current - prev;
-                          let diffText = '';
-                          let diffClass = '';
-                          if (diff > 0) {
-                            diffText = `+${diff} set 📈`;
-                            diffClass = 'text-emerald-400 font-semibold bg-emerald-500/5 border-emerald-500/10';
-                          } else if (diff < 0) {
-                            diffText = `${diff} set 📉`;
-                            diffClass = 'text-rose-400 font-semibold bg-rose-500/5 border-rose-500/10';
-                          } else {
-                            diffText = 'Sama';
-                            diffClass = 'text-slate-400 font-medium bg-white/5 border-white/5';
-                          }
-
-                          return (
-                            <div key={data.subject} className="bg-white/5 border border-white/10 rounded-xl p-2.5 flex flex-col gap-1.5">
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs font-semibold text-slate-200">{data.subject}</span>
-                                <span className="text-[10px] text-muted font-bold">{current} set</span>
-                              </div>
-                              <div className="flex justify-between items-center border-t border-white/5 pt-1.5">
-                                <span className="text-[8px] text-muted uppercase tracking-wider">WoW Progress</span>
-                                <span className={`text-[9.5px] px-1.5 py-0.5 rounded border ${diffClass}`}>{diffText}</span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                  {/* Step 3 */}
+                  <div className="flex gap-3 items-start">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
+                      workouts.length > 0 
+                        ? 'bg-success text-white' 
+                        : 'bg-white/10 text-secondary'
+                    }`}>
+                      {workouts.length > 0 ? <Check className="w-3.5 h-3.5" /> : "3"}
                     </div>
-                  )}
-
-                  {/* Pencapaian Volume Set (Target Min. 10 Set) */}
-                  {hasData && (
-                    <div className="border-t border-white/5 pt-3 mt-1">
-                      <h4 className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-2">Pencapaian Volume Set (Target Min. 10 Set)</h4>
-                      <div className="flex flex-col gap-2.5">
-                        {categories.map(cat => {
-                          const count = thisWeekSets[cat] || 0;
-                          const target = 10;
-                          const pct = Math.min(100, Math.round((count / target) * 100));
-                          
-                          return (
-                            <div key={cat} className="flex flex-col gap-1">
-                              <div className="flex justify-between items-center text-[10px]">
-                                <span className="font-semibold text-slate-300">{labelMap[cat]}</span>
-                                <span className="text-muted font-bold">{count} / {target} set</span>
-                              </div>
-                              <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5">
-                                <div 
-                                  className="h-full rounded-full transition-all duration-500" 
-                                  style={{ 
-                                    width: `${pct}%`, 
-                                    backgroundColor: pct >= 100 ? '#30d158' : '#2997ff' 
-                                  }}
-                                ></div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                    <div className="flex-1">
+                      <span className={`text-xs font-bold block ${
+                        workouts.length > 0 ? 'text-muted line-through' : 'text-slate-200'
+                      }`}>
+                        Mulai Latihan Pertama Anda
+                      </span>
+                      <p className="text-[10px] text-muted m-0 mt-0.5 font-normal">
+                        Mulai sesi latihan kustom atau pilih dari split program (contoh: Upper/Lower) yang sudah diatur.
+                      </p>
+                      {workouts.length === 0 && (
+                        <Button 
+                          type="primary" 
+                          size="small" 
+                          onClick={startNewWorkout}
+                          className="text-[10px] font-bold h-7 px-3 mt-2"
+                        >
+                          Mulai Latihan Baru
+                        </Button>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Chart: Tren Diet & Kalori (7 Hari Terakhir) */}
-            {analyticsData?.nutritionTrend?.length > 0 && (
-              <div className="glass-card">
-                <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-2">
-                  <div>
-                    <h3 className="text-sm font-semibold text-primary m-0">Tren Asupan Kalori Harian</h3>
-                    <p className="text-[10px] text-muted mt-0.5 mb-0">Konsumsi Kalori vs Target (7 Hari Terakhir)</p>
                   </div>
-                  <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-medium">
-                    Diet Chart
-                  </span>
-                </div>
-                <div className="w-full h-48">
-                  {(() => {
-                    const targets = calculateCalorieTargets();
-                    return (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={analyticsData.nutritionTrend}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                          <XAxis dataKey="label" stroke="var(--text-muted)" fontSize={10} tickLine={false} />
-                          <YAxis stroke="var(--text-muted)" fontSize={10} tickLine={false} />
-                          <Tooltip 
-                            contentStyle={{ 
-                              background: 'rgba(13, 17, 33, 0.95)', 
-                              borderColor: 'var(--border-glass)',
-                              borderRadius: '12px',
-                              color: '#fff',
-                              fontSize: '11px'
-                            }} 
-                            formatter={(value) => [`${value} kcal`, 'Asupan']}
-                          />
-                          <Bar dataKey="calories" name="Kalori" fill="#2997ff" radius={[4, 4, 0, 0]} />
-                          {targets.targetCalories > 0 && (
-                            <ReferenceLine 
-                              y={targets.targetCalories} 
-                              stroke="#ff453a" 
-                              strokeDasharray="4 4" 
-                              label={{ 
-                                value: `Target: ${targets.targetCalories} kcal`, 
-                                fill: '#ff453a', 
-                                position: 'top',
-                                fontSize: 9,
-                                fontWeight: 'bold'
-                              }} 
-                            />
-                          )}
-                        </BarChart>
-                      </ResponsiveContainer>
-                    );
-                  })()}
                 </div>
               </div>
             )}

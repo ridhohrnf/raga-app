@@ -181,25 +181,73 @@ export async function POST(request) {
       workoutId = workoutResult[0].id;
     }
 
-    // Insert Exercises and Sets
+    // Insert Exercises and Sets using Batch Query (UNNEST) to avoid N+1 query loop
     if (exercises && Array.isArray(exercises)) {
-      for (const ex of exercises) {
-        if (!ex.name) continue;
+      const validExercises = exercises.filter(ex => ex.name && ex.name.trim());
+      
+      if (validExercises.length > 0) {
+        const names = validExercises.map(ex => ex.name.trim());
+        const categories = validExercises.map(ex => ex.category || 'General');
+        const notes = validExercises.map(ex => ex.notes || '');
 
-        const exResult = await sql`
+        const insertedExercises = await sql`
           INSERT INTO exercises (workout_id, name, category, notes)
-          VALUES (${workoutId}, ${ex.name}, ${ex.category || 'General'}, ${ex.notes || ''})
+          SELECT 
+            ${workoutId}, 
+            u.name, 
+            u.category, 
+            u.notes
+          FROM UNNEST(
+            ${names}::text[], 
+            ${categories}::text[], 
+            ${notes}::text[]
+          ) AS u(name, category, notes)
           RETURNING id
         `;
-        const exerciseId = exResult[0].id;
 
-        if (ex.sets && Array.isArray(ex.sets)) {
-          for (const set of ex.sets) {
-            await sql`
-              INSERT INTO sets (exercise_id, set_number, weight, reps, rpe, completed)
-              VALUES (${exerciseId}, ${set.set_number}, ${set.weight || 0}, ${set.reps || 0}, ${set.rpe || null}, ${set.completed || false})
-            `;
+        const allSets = [];
+        validExercises.forEach((ex, index) => {
+          const exerciseId = insertedExercises[index].id;
+          if (ex.sets && Array.isArray(ex.sets)) {
+            ex.sets.forEach(set => {
+              allSets.push({
+                exercise_id: exerciseId,
+                set_number: set.set_number,
+                weight: set.weight || 0,
+                reps: set.reps || 0,
+                rpe: set.rpe || null,
+                completed: set.completed || false
+              });
+            });
           }
+        });
+
+        if (allSets.length > 0) {
+          const exerciseIds = allSets.map(s => s.exercise_id);
+          const setNumbers = allSets.map(s => s.set_number);
+          const weights = allSets.map(s => s.weight);
+          const repsList = allSets.map(s => s.reps);
+          const rpes = allSets.map(s => s.rpe);
+          const completeds = allSets.map(s => s.completed);
+
+          await sql`
+            INSERT INTO sets (exercise_id, set_number, weight, reps, rpe, completed)
+            SELECT 
+              u.exercise_id, 
+              u.set_number, 
+              u.weight, 
+              u.reps, 
+              u.rpe, 
+              u.completed
+            FROM UNNEST(
+              ${exerciseIds}::integer[], 
+              ${setNumbers}::integer[], 
+              ${weights}::numeric[], 
+              ${repsList}::integer[], 
+              ${rpes}::integer[], 
+              ${completeds}::boolean[]
+            ) AS u(exercise_id, set_number, weight, reps, rpe, completed)
+          `;
         }
       }
     }

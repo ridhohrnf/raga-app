@@ -115,16 +115,29 @@ export async function POST(request) {
       templateId = insertResult[0].id;
     }
 
-    // Insert new exercises
-    let index = 0;
-    for (const ex of exercises) {
-      if (!ex.name) continue;
-      const setsStr = ex.sets ? JSON.stringify(ex.sets) : '[]';
+    // Bulk insert exercises using UNNEST to avoid N+1 query loop
+    const validExercises = exercises.filter(ex => ex.name && ex.name.trim());
+    if (validExercises.length > 0) {
+      const names = validExercises.map(ex => ex.name.trim());
+      const categories = validExercises.map(ex => ex.category || 'General');
+      const orderIndexes = validExercises.map((_, i) => i);
+      const sets = validExercises.map(ex => ex.sets ? JSON.stringify(ex.sets) : '[]');
+
       await sql`
         INSERT INTO template_exercises (template_id, name, category, order_index, sets)
-        VALUES (${templateId}, ${ex.name.trim()}, ${ex.category || 'General'}, ${index}, ${setsStr})
+        SELECT 
+          ${templateId}, 
+          u.name, 
+          u.category, 
+          u.order_index, 
+          u.sets
+        FROM UNNEST(
+          ${names}::text[], 
+          ${categories}::text[], 
+          ${orderIndexes}::integer[], 
+          ${sets}::text[]
+        ) AS u(name, category, order_index, sets)
       `;
-      index++;
     }
 
     return NextResponse.json({ success: true, templateId });

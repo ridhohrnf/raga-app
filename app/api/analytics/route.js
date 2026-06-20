@@ -165,6 +165,44 @@ export async function GET(request) {
         ORDER BY logged_date ASC
       `;
 
+      // Get daily records for the 7 days range to calculate dynamic limits
+      const dailyRecords = await sql`
+        SELECT date::text AS date, weight::float AS weight, fitness_goal, tdee::int AS tdee, target_calories::int AS target_calories
+        FROM daily_records
+        WHERE user_id = ${user.id} AND date >= CURRENT_DATE - INTERVAL '7 days'
+      `;
+      const dailyRecordsMap = {};
+      dailyRecords.forEach(r => {
+        dailyRecordsMap[r.date] = r;
+      });
+
+      // Get daily activities for the 7 days range
+      const dailyActivities = await sql`
+        SELECT date::text AS date, COALESCE(SUM(calories), 0)::int AS calories
+        FROM daily_activities
+        WHERE user_id = ${user.id} AND date >= CURRENT_DATE - INTERVAL '7 days'
+        GROUP BY date
+      `;
+      const dailyActivitiesMap = {};
+      dailyActivities.forEach(a => {
+        dailyActivitiesMap[a.date] = a;
+      });
+
+      // Get custom daily targets for the 7 days range
+      const dailyTargets = await sql`
+        SELECT logged_date::text AS date, target_calories::int AS target_calories
+        FROM daily_targets
+        WHERE user_id = ${user.id} AND logged_date >= CURRENT_DATE - INTERVAL '7 days'
+      `;
+      const dailyTargetsMap = {};
+      dailyTargets.forEach(t => {
+        dailyTargetsMap[t.date] = t;
+      });
+
+      // Get user profile fallback settings
+      const userRows = await sql`SELECT * FROM users WHERE id = ${user.id} LIMIT 1`;
+      const fullUser = userRows[0] || {};
+
       // Buat data untuk 7 hari terakhir secara berurutan
       const nutritionTrend = [];
       const logMap = {};
@@ -180,15 +218,66 @@ export async function GET(request) {
         
         const log = logMap[dateStr] || { total_calories: 0, total_protein: 0, total_carbs: 0, total_fat: 0 };
         
+        // Dynamic target calories calculation for the day
+        const record = dailyRecordsMap[dateStr];
+        const activity = dailyActivitiesMap[dateStr];
+        const customTarget = dailyTargetsMap[dateStr];
+
+        const weight = (record && record.weight) ? parseFloat(record.weight) : (fullUser.weight ? parseFloat(fullUser.weight) : 70);
+        const height = fullUser.height ? parseFloat(fullUser.height) : 170;
+        const age = fullUser.age ? parseInt(fullUser.age) : 25;
+        const gender = fullUser.gender || 'male';
+        const fitnessGoal = (record && record.fitness_goal) ? record.fitness_goal : (fullUser.fitness_goal || 'maintenance');
+
+        let bmr = (10 * weight) + (6.25 * height) - (5 * age);
+        if (gender === 'male') bmr += 5;
+        else bmr -= 161;
+
+        const activeCalories = activity ? activity.calories : 0;
+        const tdee = Math.round((bmr * 1.2) + activeCalories);
+
+        let targetCalories = tdee;
+        if (customTarget) {
+          targetCalories = customTarget.target_calories;
+        } else if (record && record.target_calories) {
+          targetCalories = record.target_calories;
+        } else {
+          if (fitnessGoal === 'cutting') targetCalories = tdee - 500;
+          else if (fitnessGoal === 'bulking') targetCalories = tdee + 500;
+        }
+
         nutritionTrend.push({
           date: dateStr,
           label: dayLabel,
           calories: Math.round(log.total_calories),
           protein: Math.round(log.total_protein),
           carbs: Math.round(log.total_carbs),
-          fat: Math.round(log.total_fat)
+          fat: Math.round(log.total_fat),
+          targetCalories: targetCalories,
+          tdee: tdee
         });
       }
+
+      // E. Tren Berat Badan (30 Hari Terakhir)
+      const weightLogs = await sql`
+        SELECT 
+          date::text AS logged_date,
+          weight::float AS weight
+        FROM daily_records
+        WHERE user_id = ${user.id}
+          AND date >= CURRENT_DATE - INTERVAL '30 days'
+          AND weight IS NOT NULL
+        ORDER BY date ASC
+      `;
+
+      const weightTrend = weightLogs.map(log => {
+        const d = new Date(log.logged_date);
+        return {
+          date: log.logged_date,
+          label: d.toLocaleDateString('id-ID', { month: 'short', day: 'numeric' }),
+          weight: log.weight
+        };
+      });
 
       return NextResponse.json({
         success: true,
@@ -199,7 +288,8 @@ export async function GET(request) {
         },
         prs,
         weeklyTrend,
-        nutritionTrend
+        nutritionTrend,
+        weightTrend
       });
     }
   } catch (error) {

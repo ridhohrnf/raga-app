@@ -89,11 +89,26 @@ body {
   transition: var(--transition-smooth);
 }
 
+/* Fullscreen app wrapper that bypasses mobile shell framing and grid layout */
+.app-container-fullscreen {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--bg-glass);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition: var(--transition-smooth);
+  justify-content: center;
+  align-items: center;
+}
+
 @media (min-width: 480px) {
   .app-container {
     height: 90vh;
     border-radius: 18px; /* Apple rounded.lg corner style */
-    margin: 5vh 0;
+    margin: 5vh auto;
     max-height: 850px;
   }
 }
@@ -740,4 +755,291 @@ label {
   padding: 0.75rem;
   margin-top: 0.5rem;
   border-color: rgba(41, 151, 255, 0.15);
+}
+
+/* ==========================================
+   DESKTOP RESPONSIVE LAYOUT (≥1024px)
+   Transforms the mobile phone-frame into a
+   full-width desktop app with left sidebar.
+   ========================================== */
+
+/* Nav item text labels: hidden on mobile */
+.nav-label {
+  display: none;
+}
+
+/* Sidebar branding area: hidden on mobile */
+.sidebar-brand {
+  display: none;
+}
+
+@media (min-width: 768px) {
+
+  /* --- Body: remove centering for phone frame --- */
+  body {
+    justify-content: stretch;
+    align-items: stretch;
+  }
+
+  /* --- Desktop Loading Card Refinement --- */
+  .loading-card {
+    max-width: 580px !important;
+    display: grid !important;
+    grid-template-columns: 1.2fr 1fr !important;
+    grid-template-rows: auto auto !important;
+    grid-template-areas:
+      "brand progress"
+      "status progress" !important;
+    gap: 28px !important;
+    padding: 36px !important;
+    align-items: center !important;
+    text-align: left !important;
+  }
+
+  .loading-brand {
+    grid-area: brand !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+    margin-bottom: 0 !important;
+  }
+
+  .loading-circular {
+    grid-area: progress !important;
+    justify-self: center !important;
+    margin: 0 !important;
+  }
+
+  .loading-status {
+    grid-area: status !important;
+    margin-top: 0 !important;
+  }
+
+  /* --- App Container: full width, row layout for sidebar+content --- */
+  .app-container {
+    max-width: 100%;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+    margin: 0;
+    max-height: none;
+    flex-direction: row; /* sidebar | content */
+  }
+
+  /* --- Bottom Nav → Left Sidebar --- */
+  .bottom-nav {
+    position: relative;
+    flex-direction: column;
+    width: 240px;
+    min-width: 240px;
+    height: 100%;
+    border-top: none;
+    border-right: 1px solid var(--border-glass);
+    justify-content: flex-start;
+    align-items: stretch;
+    padding: 0 10px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    order: -1; /* Move sidebar before main content */
+    overflow-y: auto;
+  }
+
+  /* Sidebar branding: visible on desktop */
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 20px 16px 16px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border-glass);
+  }
+
+  .sidebar-brand img {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+
+  .sidebar-brand-text {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+  }
+
+  /* Nav items: horizontal row layout with text labels */
+  .nav-item {
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 11px 16px;
+    border-radius: 12px;
+    gap: 12px;
+    font-size: 0.88rem;
+    font-weight: 500;
+    width: 100%;
+    color: var(--text-secondary);
+    transition: var(--transition-smooth);
+  }
+
+  .nav-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+  }
+
+  .nav-item.active {
+    background: rgba(41, 151, 255, 0.1);
+    color: var(--primary);
+  }
+
+  /* Active indicator: left vertical bar instead of top horizontal */
+  .nav-item.active::after {
+    top: 50%;
+    left: 0;
+    right: auto;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 20px;
+    border-radius: 0 4px 4px 0;
+  }
+
+  /* Nav icon sizing */
+  .nav-item svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  /* Show nav text labels on desktop */
+  .nav-label {
+    display: inline;
+    white-space: nowrap;
+  }
+
+  /* --- Main Content Wrapper (header + screen-content) --- */
+  .app-container > .app-header,
+  .app-container > main.screen-content {
+    /* These stack vertically inside the right column */
+  }
+
+  /* Create a flex column for header + content using a wrapper approach */
+  /* Since we can't add a wrapper without JSX, we use CSS grid instead */
+  .app-container {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "sidebar header"
+      "sidebar content";
+  }
+
+  .bottom-nav {
+    grid-area: sidebar;
+    display: flex; /* override grid */
+  }
+
+  .app-header {
+    grid-area: header;
+    padding: 16px 48px;
+    max-width: 1000px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .screen-content {
+    grid-area: content;
+    padding: 28px 48px 28px 48px;
+    max-width: 1000px;
+    width: 100%;
+    margin: 0 auto;
+    overflow-y: auto;
+  }
+
+  /* --- Typography Scaling --- */
+  html {
+    font-size: 15px;
+  }
+
+  h1 {
+    font-size: 1.65rem;
+  }
+
+  h2 {
+    font-size: 1.3rem;
+  }
+
+  /* --- Glass Cards: subtle hover enhancement --- */
+  .glass-card {
+    transition: var(--transition-smooth);
+  }
+
+  .glass-card:hover {
+    border-color: #48484a;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  }
+
+  /* --- Chart Heights: taller on desktop --- */
+  .h-48 {
+    height: 16rem;
+  }
+
+  .h-40 {
+    height: 14rem;
+  }
+
+  /* --- Stat Grids: more columns on desktop --- */
+  .grid-cols-2 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .grid-cols-3 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  /* --- Input Fields: slight width control --- */
+  .input-field {
+    max-width: 480px;
+  }
+
+  /* --- Modals: wider on desktop --- */
+  .max-w-sm {
+    max-width: 32rem;
+  }
+
+  .max-w-md {
+    max-width: 36rem;
+  }
+
+  /* --- Macro grid: keep 3 col on desktop too --- */
+  .glass-card .grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ==========================================
+   EXTRA LARGE DESKTOP (≥1440px)
+   Further refinements for ultra-wide screens
+   ========================================== */
+@media (min-width: 1440px) {
+  .app-header {
+    max-width: 1100px;
+    padding: 16px 64px;
+  }
+
+  .screen-content {
+    max-width: 1100px;
+    padding: 32px 64px 32px 64px;
+  }
+
+  .h-48 {
+    height: 18rem;
+  }
+
+  .h-40 {
+    height: 16rem;
+  }
 }

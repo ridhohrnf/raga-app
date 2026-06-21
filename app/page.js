@@ -3883,7 +3883,7 @@ export default function Home() {
                       {/* Sets Table */}
                       <div className="overflow-x-auto w-full pb-1">
                         <div className="min-w-[320px] flex flex-col gap-2">
-                          <div className="grid grid-cols-[36px_1.5fr_1.5fr_50px] gap-2 mb-1 text-[10px] text-muted font-bold uppercase tracking-wider text-center">
+                          <div className="grid grid-cols-[130px_1.5fr_1.5fr_50px] gap-2 mb-1 text-[10px] text-muted font-bold uppercase tracking-wider text-center">
                             <div className="text-left pl-2">Set</div>
                             <div>Beban</div>
                             <div>Reps</div>
@@ -3892,11 +3892,19 @@ export default function Home() {
 
                           {ex.sets.map((set, setIdx) => (
                             <div key={setIdx} className="flex flex-col gap-1.5">
-                              <div className="grid grid-cols-[36px_1.5fr_1.5fr_50px] gap-2 items-end">
+                              <div className="grid grid-cols-[130px_1.5fr_1.5fr_50px] gap-2 items-end">
                                 {/* Set Number Column */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-start', paddingLeft: '8px' }}>
                                   <span style={{ height: '11px', display: 'block' }}></span>
-                                  <span className="text-xs text-muted text-center font-bold">{set.set_number}</span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '34px' }}>
+                                    <span className="text-xs text-muted font-bold">{set.set_number}</span>
+                                    {(set.target_reps !== undefined || set.target_rir !== undefined) && (
+                                      <span className="bg-purple/10 px-2 py-0.5 rounded text-purple border border-purple/10 font-bold text-[9px] whitespace-nowrap">
+                                        {set.target_reps !== undefined ? `${set.target_reps} reps` : ''} 
+                                        {set.target_rir !== undefined && set.target_rir !== '' ? ` @ RIR ${set.target_rir}` : ''}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                                 
                                 {/* Weight Input with small previous weight above */}
@@ -3945,17 +3953,6 @@ export default function Home() {
                                   </div>
                                 </div>
                               </div>
-
-                              {/* Target Reference Info Badge */}
-                              {(set.target_reps !== undefined || set.target_rir !== undefined) && (
-                                <div className="pl-9 text-[9.5px] text-purple/85 font-medium flex items-center gap-1">
-                                  <span className="text-slate-500 font-bold uppercase tracking-wider text-[8px]">Patokan Rencana:</span>
-                                  <span className="bg-purple/10 px-2 py-0.5 rounded text-purple border border-purple/10 font-bold">
-                                    {set.target_reps !== undefined ? `${set.target_reps} reps` : ''} 
-                                    {set.target_rir !== undefined && set.target_rir !== '' ? ` @ RIR ${set.target_rir}` : ''}
-                                  </span>
-                                </div>
-                              )}
                             </div>
                           ))}
                         </div>

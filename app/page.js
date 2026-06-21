@@ -293,6 +293,10 @@ export default function Home() {
   const [dailyNutritionModalMeals, setDailyNutritionModalMeals] = useState([]);
   const [loadingDailyNutritionModal, setLoadingDailyNutritionModal] = useState(false);
 
+  // Weekly workout volume details modal states
+  const [showVolumeModal, setShowVolumeModal] = useState(false);
+  const [selectedVolumeDate, setSelectedVolumeDate] = useState(null);
+
   // Muscle stimulus week filter and Collapsible workout history states
   const [stimulusDate, setStimulusDate] = useState(dayjs());
   const [expandedWorkoutIds, setExpandedWorkoutIds] = useState([]);
@@ -1916,6 +1920,30 @@ export default function Home() {
     return totalVolume;
   };
 
+  const getWeeklyPeriodString = () => {
+    const startOfWeek = dayjs().locale('id').startOf('week');
+    const endOfWeek = dayjs().locale('id').endOf('week');
+    return `${startOfWeek.format('D MMM')} - ${endOfWeek.format('D MMM YYYY')}`;
+  };
+
+  const getDaysOfWeekList = () => {
+    const startOfWeek = dayjs().locale('id').startOf('week');
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = startOfWeek.add(i, 'day');
+      days.push({
+        value: d.format('YYYY-MM-DD'),
+        label: d.format('dddd, D MMM YYYY')
+      });
+    }
+    return days;
+  };
+
+  const handleVolumeCardClick = () => {
+    setSelectedVolumeDate(null);
+    setShowVolumeModal(true);
+  };
+
   const getWeeklyWorkoutsCount = () => {
     if (!workouts || workouts.length === 0) return 0;
     const startOfWeek = dayjs().locale('id').startOf('week');
@@ -2946,8 +2974,12 @@ export default function Home() {
 
             {/* Quick Stats Grid */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="glass-card p-3 flex flex-col justify-between items-center text-center">
+              <div 
+                onClick={handleVolumeCardClick}
+                className="glass-card p-3 flex flex-col justify-between items-center text-center cursor-pointer hover:border-purple/30 transition-all"
+              >
                 <span className="text-[9px] text-secondary font-bold uppercase tracking-wider block">Volume (Week)</span>
+                <span className="text-[8px] text-muted block mt-0.5">{getWeeklyPeriodString()}</span>
                 <span className="text-sm font-bold mt-1 text-slate-100">
                   {getWeeklyVolume().toLocaleString('id-ID')} Set
                 </span>
@@ -5346,6 +5378,121 @@ export default function Home() {
                 Buat
               </Button>
             </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 4.5 Weekly Volume Details Modal */}
+      <Modal
+        title={<span className="text-base font-bold text-gradient-purple">Volume Latihan Mingguan</span>}
+        open={showVolumeModal}
+        onCancel={() => setShowVolumeModal(false)}
+        footer={null}
+        width={500}
+        centered
+        styles={{
+          mask: {
+            backdropFilter: 'blur(4px)',
+          },
+          content: {
+            background: '#0a0d1d',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '20px',
+          }
+        }}
+      >
+        <div className="flex flex-col gap-4 pt-2">
+          <div>
+            <span className="text-[10px] text-secondary font-bold uppercase tracking-wider block">Periode Latihan</span>
+            <span className="text-xs text-slate-300 font-medium block mt-0.5">{getWeeklyPeriodString()}</span>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] text-secondary font-bold uppercase tracking-wider block">Pilih Tanggal Latihan</label>
+            <Select
+              placeholder="Pilih tanggal terlebih dahulu..."
+              style={{ width: '100%' }}
+              value={selectedVolumeDate}
+              onChange={value => setSelectedVolumeDate(value)}
+              options={getDaysOfWeekList().map(day => ({
+                value: day.value,
+                label: day.label
+              }))}
+            />
+          </div>
+
+          {/* Workouts list section */}
+          <div className="mt-2 flex flex-col gap-3 max-h-[350px] overflow-y-auto pr-1">
+            {!selectedVolumeDate ? (
+              <div className="text-center p-8 bg-white/5 border border-white/10 rounded-2xl text-xs text-muted">
+                Silakan pilih tanggal terlebih dahulu untuk melihat daftar latihan.
+              </div>
+            ) : (() => {
+              const selectedWorkouts = workouts.filter(w => {
+                if (!w.completed) return false;
+                return dayjs(w.date).format('YYYY-MM-DD') === selectedVolumeDate;
+              });
+
+              if (selectedWorkouts.length === 0) {
+                return (
+                  <div className="text-center p-8 bg-white/5 border border-white/10 rounded-2xl text-xs text-muted">
+                    Tidak ada latihan pada tanggal {dayjs(selectedVolumeDate).format('D MMMM YYYY')}.
+                  </div>
+                );
+              }
+
+              return selectedWorkouts.map((w, wIdx) => (
+                <div key={w.id || wIdx} className="bg-white/5 border border-white/5 rounded-xl p-3 flex flex-col gap-2">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="font-bold text-xs text-gradient-purple">{w.name}</span>
+                    <span className="text-[10px] text-muted flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-purple" />
+                      {dayjs(w.date).format('HH:mm')}
+                    </span>
+                  </div>
+                  {w.notes && (
+                    <p className="text-[10px] text-slate-400 italic m-0">
+                      Catatan: {w.notes}
+                    </p>
+                  )}
+                  <div className="flex flex-col gap-2.5 mt-1">
+                    {w.exercises?.map((ex, exIdx) => {
+                      const anatomy = getExerciseAnatomyInfo(ex.name, ex.category);
+                      return (
+                        <div key={ex.id || exIdx} className="bg-black/20 rounded-lg p-2.5 flex flex-col gap-1.5">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-[11px] text-slate-300">{ex.name}</span>
+                            <span className="text-[8px] text-muted bg-white/10 px-1.5 py-0.5 rounded-full">{ex.category}</span>
+                          </div>
+                          {anatomy.detail && (
+                            <div className="text-[9px] text-purple/90 font-medium">
+                              🎯 Target: {anatomy.detail}
+                            </div>
+                          )}
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {ex.sets?.map((set, setIdx) => (
+                              <div 
+                                key={set.id || setIdx} 
+                                className={`flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[9px] border ${
+                                  set.completed 
+                                    ? 'bg-success-glow/20 border-success/20 text-emerald-400' 
+                                    : 'bg-white/5 border-white/5 text-slate-400'
+                                }`}
+                              >
+                                <span className="font-bold">S{set.set_number}:</span>
+                                <span>{set.weight} kg</span>
+                                <span>x</span>
+                                <span>{set.reps} r</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         </div>
       </Modal>

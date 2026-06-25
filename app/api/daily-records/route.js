@@ -83,6 +83,10 @@ export async function GET(request) {
         id, 
         date::text AS date, 
         weight::float AS weight, 
+        body_fat::float AS body_fat,
+        neck::float AS neck,
+        waist::float AS waist,
+        hip::float AS hip,
         fitness_goal, 
         tdee::int AS tdee, 
         target_calories::int AS target_calories
@@ -108,7 +112,11 @@ export async function GET(request) {
       record: {
         id: null,
         date: dateStr,
-        weight: null, // null indicates weight is not explicitly logged yet
+        weight: null,
+        body_fat: null,
+        neck: null,
+        waist: null,
+        hip: null,
         fitness_goal: metrics.fitnessGoal,
         tdee: metrics.tdee,
         target_calories: metrics.targetCalories
@@ -130,13 +138,18 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { date, weight } = body;
+    const { date, weight, body_fat, bodyFat, neck, waist, hip } = body;
 
     if (!date) {
       return NextResponse.json({ error: 'Tanggal wajib diisi' }, { status: 400 });
     }
 
     const parsedWeight = weight ? parseFloat(weight) : null;
+    const rawBodyFat = body_fat !== undefined ? body_fat : bodyFat;
+    const parsedBodyFat = rawBodyFat ? parseFloat(rawBodyFat) : null;
+    const parsedNeck = neck ? parseFloat(neck) : null;
+    const parsedWaist = waist ? parseFloat(waist) : null;
+    const parsedHip = hip ? parseFloat(hip) : null;
     const sql = await getDb();
 
     // Fetch user details
@@ -149,15 +162,19 @@ export async function POST(request) {
 
     // Upsert daily_records
     const result = await sql`
-      INSERT INTO daily_records (user_id, date, weight, fitness_goal, tdee, target_calories)
-      VALUES (${user.id}, ${date}, ${parsedWeight}, ${metrics.fitnessGoal}, ${metrics.tdee}, ${metrics.targetCalories})
+      INSERT INTO daily_records (user_id, date, weight, body_fat, neck, waist, hip, fitness_goal, tdee, target_calories)
+      VALUES (${user.id}, ${date}, ${parsedWeight}, ${parsedBodyFat}, ${parsedNeck}, ${parsedWaist}, ${parsedHip}, ${metrics.fitnessGoal}, ${metrics.tdee}, ${metrics.targetCalories})
       ON CONFLICT (user_id, date)
       DO UPDATE SET
         weight = EXCLUDED.weight,
+        body_fat = EXCLUDED.body_fat,
+        neck = EXCLUDED.neck,
+        waist = EXCLUDED.waist,
+        hip = EXCLUDED.hip,
         fitness_goal = EXCLUDED.fitness_goal,
         tdee = EXCLUDED.tdee,
         target_calories = EXCLUDED.target_calories
-      RETURNING id, date::text AS date, weight::float AS weight, fitness_goal, tdee::int AS tdee, target_calories::int AS target_calories
+      RETURNING id, date::text AS date, weight::float AS weight, body_fat::float AS body_fat, neck::float AS neck, waist::float AS waist, hip::float AS hip, fitness_goal, tdee::int AS tdee, target_calories::int AS target_calories
     `;
 
     return NextResponse.json({ success: true, record: result[0] });

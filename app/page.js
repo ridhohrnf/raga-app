@@ -49,7 +49,7 @@ import {
   ReferenceLine
 } from 'recharts';
 import confetti from 'canvas-confetti';
-import { ConfigProvider, theme, DatePicker, Select, Button, Input, InputNumber, Upload, Modal, Segmented, App } from 'antd';
+import { ConfigProvider, theme, DatePicker, Select, Button, Input, InputNumber, Upload, Modal, Segmented, App, Dropdown } from 'antd';
 import dayjs from 'dayjs';
 import 'dayjs/locale/id'; // Indonesian locale for Day.js
 
@@ -310,8 +310,17 @@ export default function Home() {
   // Daily weight diary states
   const [dailyWeight, setDailyWeight] = useState(null);
   const [tempWeight, setTempWeight] = useState(null);
+  const [dailyBodyFat, setDailyBodyFat] = useState(null);
+  const [tempBodyFat, setTempBodyFat] = useState(null);
   const [submittingWeight, setSubmittingWeight] = useState(false);
   const [dailyRecord, setDailyRecord] = useState(null);
+  
+  // Body Fat Calculator modal states
+  const [showBodyFatCalculatorModal, setShowBodyFatCalculatorModal] = useState(false);
+  const [calculatorMethod, setCalculatorMethod] = useState('navy'); // 'navy' or 'deurenberg'
+  const [neckCirc, setNeckCirc] = useState(null);
+  const [waistCirc, setWaistCirc] = useState(null);
+  const [hipCirc, setHipCirc] = useState(null);
 
   // Workout split template states
   const [templates, setTemplates] = useState([]);
@@ -1244,6 +1253,11 @@ export default function Home() {
         setDailyRecord(data.record || null);
         setDailyWeight(data.record?.weight || null);
         setTempWeight(data.record?.weight || null);
+        setDailyBodyFat(data.record?.body_fat || null);
+        setTempBodyFat(data.record?.body_fat || null);
+        setNeckCirc(data.record?.neck || null);
+        setWaistCirc(data.record?.waist || null);
+        setHipCirc(data.record?.hip || null);
       }
     } catch (e) {
       console.error('Error fetching daily record:', e);
@@ -1263,13 +1277,21 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date: nutritionDate,
-          weight: tempWeight
+          weight: tempWeight,
+          body_fat: tempBodyFat,
+          neck: neckCirc,
+          waist: waistCirc,
+          hip: hipCirc
         })
       });
       if (res.ok) {
         const data = await res.json();
-        message.success('Berat badan harian berhasil disimpan!');
+        message.success('Berat badan dan komposisi tubuh harian berhasil disimpan!');
         setDailyWeight(data.record?.weight || null);
+        setDailyBodyFat(data.record?.body_fat || null);
+        setNeckCirc(data.record?.neck || null);
+        setWaistCirc(data.record?.waist || null);
+        setHipCirc(data.record?.hip || null);
         setDailyRecord(data.record || null);
         // Refresh calorie targets and analytics
         await fetchDailyTarget(nutritionDate);
@@ -1277,7 +1299,7 @@ export default function Home() {
         await fetchInitialData(nutritionDate);
       } else {
         const err = await res.json();
-        message.error(err.error || 'Gagal menyimpan berat badan.');
+        message.error(err.error || 'Gagal menyimpan data.');
       }
     } catch (err) {
       console.error(err);
@@ -1285,6 +1307,92 @@ export default function Home() {
     } finally {
       setSubmittingWeight(false);
     }
+  };
+
+  const calculateNavyBodyFat = () => {
+    const h = user?.height ? parseFloat(user.height) : 170;
+    const gender = user?.gender || 'male';
+    const neck = parseFloat(neckCirc);
+    const waist = parseFloat(waistCirc);
+    const hip = parseFloat(hipCirc);
+
+    if (isNaN(neck) || isNaN(waist) || neck <= 0 || waist <= 0) return null;
+    if (gender === 'female' && (isNaN(hip) || hip <= 0)) return null;
+
+    try {
+      if (gender === 'male') {
+        if (waist - neck <= 0) return null;
+        const density = 1.0324 - 0.19077 * Math.log10(waist - neck) + 0.15456 * Math.log10(h);
+        const bf = (495 / density) - 450;
+        return isNaN(bf) || bf < 2 || bf > 60 ? null : parseFloat(bf.toFixed(1));
+      } else {
+        if (waist + hip - neck <= 0) return null;
+        const density = 1.29579 - 0.35004 * Math.log10(waist + hip - neck) + 0.22100 * Math.log10(h);
+        const bf = (495 / density) - 450;
+        return isNaN(bf) || bf < 2 || bf > 60 ? null : parseFloat(bf.toFixed(1));
+      }
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  };
+
+  const calculateDeurenbergBodyFatValue = () => {
+    const w = tempWeight || dailyWeight || user?.weight;
+    const h = user?.height ? parseFloat(user.height) : 170;
+    const age = user?.age ? parseInt(user.age) : 25;
+    const gender = user?.gender || 'male';
+
+    if (!w) return null;
+    const bmi = parseFloat(w) / ((h / 100) * (h / 100));
+    let bf = 0;
+    if (gender === 'male') {
+      bf = (1.20 * bmi) + (0.23 * age) - 16.2;
+    } else {
+      bf = (1.20 * bmi) + (0.23 * age) - 5.4;
+    }
+    return parseFloat(bf.toFixed(1));
+  };
+
+  const getBodyFatStatus = (bfPercentage, gender) => {
+    if (bfPercentage === null || bfPercentage === undefined) return null;
+    const bf = parseFloat(bfPercentage);
+    if (gender === 'female') {
+      if (bf < 21) return { status: 'Kurang Lemak (Underfat)', color: '#ff9f0a' };
+      if (bf < 33) return { status: 'Sehat (Normal)', color: '#30d158' };
+      if (bf < 39) return { status: 'Kelebihan Lemak (Overfat)', color: '#ff453a' };
+      return { status: 'Obesitas (Obese)', color: '#ff3b30' };
+    } else {
+      if (bf < 10) return { status: 'Kurang Lemak (Underfat)', color: '#ff9f0a' };
+      if (bf < 21) return { status: 'Sehat (Normal)', color: '#30d158' };
+      if (bf < 25) return { status: 'Kelebihan Lemak (Overfat)', color: '#ff453a' };
+      return { status: 'Obesitas (Obese)', color: '#ff3b30' };
+    }
+  };
+
+  const getEstimatedBodyFat = () => {
+    const w = dailyWeight || user?.weight;
+    const h = user?.height;
+    const age = user?.age;
+    const gender = user?.gender || 'male';
+    if (!w || !h || !age) return null;
+    const bmi = parseFloat(w) / ((parseFloat(h) / 100) * (parseFloat(h) / 100));
+    let bf = 0;
+    if (gender === 'male') {
+      bf = (1.20 * bmi) + (0.23 * parseFloat(age)) - 16.2;
+    } else {
+      bf = (1.20 * bmi) + (0.23 * parseFloat(age)) - 5.4;
+    }
+    return parseFloat(bf.toFixed(1));
+  };
+
+  const getBmiStatus = (w, h) => {
+    if (!w || !h) return null;
+    const bmi = parseFloat(w) / ((parseFloat(h) / 100) * (parseFloat(h) / 100));
+    if (bmi < 18.5) return { status: 'Kekurangan Berat (Underweight)', color: '#ff9f0a', bmi: bmi.toFixed(1) };
+    if (bmi < 25.0) return { status: 'Normal (Ideal)', color: '#30d158', bmi: bmi.toFixed(1) };
+    if (bmi < 30.0) return { status: 'Kelebihan Berat (Overweight)', color: '#ff453a', bmi: bmi.toFixed(1) };
+    return { status: 'Obesitas (Obese)', color: '#ff3b30', bmi: bmi.toFixed(1) };
   };
 
   const openDailyTargetModal = () => {
@@ -2972,6 +3080,105 @@ export default function Home() {
               );
             })()}
 
+            {/* Card: Komposisi Tubuh */}
+            {(() => {
+              const displayBodyFat = dailyBodyFat || getEstimatedBodyFat();
+              const isEstimated = !dailyBodyFat && getEstimatedBodyFat() !== null;
+              const status = getBodyFatStatus(displayBodyFat, user?.gender);
+
+              return (
+                <div className="glass-card flex flex-col gap-3.5 py-4 px-4 animate-pop-in bg-gradient-to-r from-blue-500/5 to-purple-500/5 border-blue-500/20">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <h3 className="text-sm font-semibold m-0 text-slate-100 flex items-center gap-1.5">
+                      <TrendingUp className="w-4 h-4 text-blue-400" />
+                      Komposisi Tubuh ({dayjs(nutritionDate).format('D MMM YYYY')})
+                    </h3>
+                    <Button 
+                      type="dashed" 
+                      size="small" 
+                      onClick={() => setActiveTab('nutrition')}
+                      className="text-[9px] h-6 px-2 font-semibold border-blue-500/30 text-blue-400 bg-blue-500/5 hover:bg-blue-500/10"
+                    >
+                      Ubah / Catat
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Berat Badan */}
+                    <div className="bg-white/5 border border-white/5 rounded-xl p-3 flex flex-col justify-between">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[9px] text-secondary font-bold uppercase tracking-wider block">Berat Badan</span>
+                        <span className="text-sm font-bold mt-1 text-slate-100 block">
+                          {dailyWeight ? `${dailyWeight} kg` : (user?.weight ? `${user.weight} kg (profil)` : 'Belum dicatat')}
+                        </span>
+                      </div>
+                      {(() => {
+                        const bmiInfo = getBmiStatus(dailyWeight || user?.weight, user?.height);
+                        if (!bmiInfo) return null;
+                        
+                        const h = parseFloat(user.height);
+                        const minW = (18.5 * (h / 100) * (h / 100)).toFixed(1);
+                        const maxW = (24.9 * (h / 100) * (h / 100)).toFixed(1);
+                        
+                        return (
+                          <div className="flex flex-col gap-1 mt-1.5">
+                            <div className="flex">
+                              <span 
+                                className="inline-flex items-center text-[8px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                                style={{ 
+                                  backgroundColor: `${bmiInfo.color}20`, 
+                                  color: bmiInfo.color,
+                                  border: `1px solid ${bmiInfo.color}30`
+                                }}
+                                title={`BMI: ${bmiInfo.bmi}`}
+                              >
+                                {bmiInfo.status}
+                              </span>
+                            </div>
+                            <span className="text-[8px] text-muted block mt-0.5">
+                              Target Ideal: {((18.5 + 24.9) / 2 * (h / 100) * (h / 100)).toFixed(1)} kg
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Body Fat % */}
+                    <div className="bg-white/5 border border-white/5 rounded-xl p-3 flex flex-col justify-between">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[9px] text-secondary font-bold uppercase tracking-wider block">Massa Lemak</span>
+                        <span className="text-sm font-bold mt-1 text-slate-100 block">
+                          {displayBodyFat ? `${displayBodyFat}%` : 'Belum dicatat'}
+                          {isEstimated && <span className="text-[9px] font-normal text-amber-400 ml-1">(Estimasi)</span>}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1 mt-1.5">
+                        {status && (
+                          <div className="flex">
+                            <span 
+                              className="inline-flex items-center text-[8px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                              style={{ 
+                                backgroundColor: `${status.color}20`, 
+                                color: status.color,
+                                border: `1px solid ${status.color}30`
+                              }}
+                            >
+                              {status.status}
+                            </span>
+                          </div>
+                        )}
+                        {user && (
+                          <span className="text-[8px] text-muted block mt-0.5">
+                            Target Ideal: {user.gender === 'female' ? '27.0%' : '15.5%'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Quick Stats Grid */}
             <div className="grid grid-cols-3 gap-3">
               <div 
@@ -3050,8 +3257,7 @@ export default function Home() {
                           fontSize: '11px'
                         }} 
                         formatter={(value, name) => {
-                          if (name === 'targetCalories') return [`${value} kcal`, 'Target Kalori (TDEE)'];
-                          return [`${value} kcal`, 'Asupan Kalori'];
+                          return [`${value} kcal`, name];
                         }}
                       />
                       <Legend 
@@ -3102,14 +3308,26 @@ export default function Home() {
                 </div>
                 <div className="w-full h-48">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={analyticsData.weightTrend}>
+                    <LineChart 
+                      data={analyticsData.weightTrend}
+                      margin={{ top: 10, right: 15, left: -10, bottom: 5 }}
+                    >
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                       <XAxis dataKey="label" stroke="var(--text-muted)" fontSize={10} tickLine={false} />
                       <YAxis 
+                        yAxisId="left"
                         stroke="var(--text-muted)" 
                         fontSize={10} 
                         tickLine={false} 
                         domain={['dataMin - 2', 'dataMax + 2']} 
+                      />
+                      <YAxis 
+                        yAxisId="right"
+                        orientation="right"
+                        stroke="var(--text-muted)" 
+                        fontSize={10} 
+                        tickLine={false} 
+                        domain={[0, 'auto']} 
                       />
                       <Tooltip 
                         contentStyle={{ 
@@ -3119,9 +3337,15 @@ export default function Home() {
                           color: '#fff',
                           fontSize: '11px'
                         }} 
-                        formatter={(value) => [`${value} kg`, 'Berat Badan']}
+                        formatter={(value, name) => {
+                          if (name === 'Berat Badan') return [`${value} kg`, name];
+                          if (name === 'Body Fat') return [`${value} %`, name];
+                          return [value, name];
+                        }}
                       />
+                      <Legend wrapperStyle={{ fontSize: '9px' }} verticalAlign="top" height={24} />
                       <Line 
+                        yAxisId="left"
                         type="monotone" 
                         dataKey="weight" 
                         name="Berat Badan" 
@@ -3129,6 +3353,18 @@ export default function Home() {
                         strokeWidth={2.5} 
                         dot={{ r: 4 }} 
                         activeDot={{ r: 6 }} 
+                        connectNulls={true}
+                      />
+                      <Line 
+                        yAxisId="right"
+                        type="monotone" 
+                        dataKey="bodyFat" 
+                        name="Body Fat" 
+                        stroke="#bf5af2" 
+                        strokeWidth={2.5} 
+                        dot={{ r: 4 }} 
+                        activeDot={{ r: 6 }} 
+                        connectNulls={true}
                       />
                     </LineChart>
                   </ResponsiveContainer>
@@ -4502,33 +4738,204 @@ export default function Home() {
               </Button>
             </div>
 
-            {/* Daily Weight Logger */}
-            <div className="glass-card flex justify-between items-center gap-4 py-3 px-4 animate-pop-in">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] text-muted font-bold uppercase tracking-wider">Berat Badan Hari Ini</span>
-                <span className="text-sm font-semibold text-slate-200">
-                  {dailyWeight ? `${dailyWeight} kg` : (user?.weight ? `${user.weight} kg (dari profil)` : 'Belum dicatat')}
-                </span>
+            {/* Daily Weight & Body Fat Logger */}
+            <div className="glass-card flex flex-col gap-3 py-3.5 px-4 animate-pop-in border-blue-500/15">
+              <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                <span className="text-[10px] text-muted font-bold uppercase tracking-wider">Berat & Komposisi Tubuh</span>
+                <span className="text-[9px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-medium">Harian</span>
               </div>
-              <form onSubmit={handleSaveDailyWeight} className="flex gap-2 items-center">
-                <InputNumber
-                  placeholder="Berat (kg)"
-                  value={tempWeight}
-                  onChange={val => setTempWeight(val)}
-                  className="w-24 text-xs h-8"
-                  min={30}
-                  max={300}
-                  step={0.1}
-                  style={{ background: '#1c1c1e', border: '1px solid var(--border-glass)' }}
-                />
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  loading={submittingWeight}
-                  className="h-8 px-3 text-xs font-semibold rounded-lg"
-                >
-                  Simpan
-                </Button>
+              
+              <form onSubmit={handleSaveDailyWeight} className="flex flex-col gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Input Berat Badan */}
+                  <div className="flex items-center justify-between gap-3 bg-white/5 border border-white/5 rounded-xl p-2.5">
+                    <div className="flex flex-col">
+                      <span className="text-[9px] text-secondary font-bold uppercase tracking-wider">Berat Badan</span>
+                      <span className="text-xs text-muted mt-0.5 font-semibold">
+                        {dailyWeight ? `${dailyWeight} kg` : (user?.weight ? `${user.weight} kg (profil)` : 'Belum dicatat')}
+                      </span>
+                    </div>
+                    <InputNumber
+                      placeholder="Berat (kg)"
+                      value={tempWeight}
+                      onChange={val => setTempWeight(val)}
+                      className="w-28 text-xs h-9"
+                      min={30}
+                      max={300}
+                      step={0.1}
+                      style={{ background: '#1c1c1e', border: '1px solid var(--border-glass)' }}
+                    />
+                  </div>
+
+                  {/* Input Body Fat */}
+                  <div className="flex items-center justify-between gap-2 bg-white/5 border border-white/5 rounded-xl p-2.5">
+                    <div className="flex flex-col">
+                      <span className="text-[9px] text-secondary font-bold uppercase tracking-wider">Body Fat (%)</span>
+                      <span className="text-xs text-muted mt-0.5 font-semibold">
+                        {dailyBodyFat ? `${dailyBodyFat} %` : 'Belum dicatat'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <InputNumber
+                        placeholder="Fat (%)"
+                        value={tempBodyFat}
+                        onChange={val => setTempBodyFat(val)}
+                        className="w-20 text-xs h-9"
+                        min={1}
+                        max={80}
+                        step={0.1}
+                        style={{ background: '#1c1c1e', border: '1px solid var(--border-glass)' }}
+                      />
+                      <Dropdown
+                        menu={{
+                          items: [
+                            {
+                              key: 'auto',
+                              label: (
+                                <div className="flex flex-col py-1.5 px-2 min-w-[220px]">
+                                  <span className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                                    <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                                    Hitung Otomatis (Profil)
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 mt-1 whitespace-normal leading-relaxed">
+                                    Estimasi lemak tubuh berdasarkan umur, tinggi badan, berat badan harian, dan gender profil Anda.
+                                  </span>
+                                </div>
+                              ),
+                            },
+                            {
+                              key: 'navy',
+                              label: (
+                                <div className="flex flex-col py-1.5 px-2 mt-1 pt-2.5 border-t border-white/5 min-w-[220px]">
+                                  <span className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                                    <TrendingUp className="w-3.5 h-3.5 text-purple-400" />
+                                    Hitung Pakai Lingkar (US Navy)
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 mt-1 whitespace-normal leading-relaxed">
+                                    Menggunakan ukuran lingkar leher, perut, dan pinggul untuk hasil perhitungan lebih presisi.
+                                  </span>
+                                </div>
+                              ),
+                            },
+                          ],
+                          onClick: ({ key }) => {
+                            const w = tempWeight || dailyWeight || user?.weight;
+                            if (!w) {
+                              message.warning('Masukkan berat badan terlebih dahulu untuk menghitung body fat.');
+                              return;
+                            }
+                            if (!user?.height) {
+                              message.warning('Silakan lengkapi tinggi badan Anda di profil terlebih dahulu.');
+                              return;
+                            }
+                            if (!user?.age) {
+                              message.warning('Silakan lengkapi umur Anda di profil terlebih dahulu.');
+                              return;
+                            }
+
+                            if (key === 'auto') {
+                              const result = calculateDeurenbergBodyFatValue();
+                              if (result !== null) {
+                                setTempBodyFat(result);
+                                message.success(`Berhasil menghitung otomatis: ${result}% (Deurenberg)`);
+                              } else {
+                                message.error('Gagal menghitung otomatis.');
+                              }
+                            } else if (key === 'navy') {
+                              const result = calculateNavyBodyFat();
+                              if (result !== null) {
+                                setTempBodyFat(result);
+                                message.success(`Berhasil menghitung via lingkar: ${result}% (US Navy)`);
+                              } else {
+                                message.warning('Masukkan ukuran lingkar leher & perut (dan pinggul untuk wanita) pada kolom di bawah terlebih dahulu.');
+                              }
+                            }
+                          }
+                        }}
+                        trigger={['click']}
+                        placement="bottomRight"
+                      >
+                        <Button
+                          type="default"
+                          className="h-9 px-2 text-[10px] flex items-center gap-0.5 bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500/25 font-bold"
+                          title="Pilih Metode Hitung Lemak Tubuh"
+                        >
+                          <Sparkles className="w-3 h-3" /> Hitung <ChevronDown className="w-3 h-3 ml-0.5" />
+                        </Button>
+                      </Dropdown>
+                    </div>
+                  </div>
+
+                  {/* Ukuran Lingkar Badan (US Navy) - Per Hari */}
+                  <div className="flex flex-col gap-2 bg-white/5 border border-white/5 rounded-xl p-3 text-left">
+                    <span className="text-[9px] text-secondary font-bold uppercase tracking-wider flex items-center gap-1">
+                      📐 Ukuran Lingkar Badan (Harian)
+                    </span>
+                    <span className="text-[8px] text-muted leading-relaxed block">
+                      Opsional. Isi untuk menghitung persentase body fat harian menggunakan metode US Navy.
+                    </span>
+
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      {/* Leher */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[8px] text-secondary font-medium">Lingkar Leher (Neck)</label>
+                        <InputNumber
+                          placeholder="cm"
+                          value={neckCirc}
+                          onChange={val => setNeckCirc(val)}
+                          className="w-full text-xs h-9"
+                          min={10}
+                          max={100}
+                          step={0.1}
+                          style={{ background: '#1c1c1e', border: '1px solid var(--border-glass)' }}
+                        />
+                      </div>
+
+                      {/* Perut */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[8px] text-secondary font-medium">Lingkar Perut (Waist)</label>
+                        <InputNumber
+                          placeholder="cm"
+                          value={waistCirc}
+                          onChange={val => setWaistCirc(val)}
+                          className="w-full text-xs h-9"
+                          min={20}
+                          max={200}
+                          step={0.1}
+                          style={{ background: '#1c1c1e', border: '1px solid var(--border-glass)' }}
+                        />
+                      </div>
+
+                      {/* Pinggul (khusus wanita) */}
+                      {user?.gender === 'female' && (
+                        <div className="flex flex-col gap-1 col-span-2">
+                          <label className="text-[8px] text-secondary font-medium">Lingkar Pinggul (Hips) - Wanita</label>
+                          <InputNumber
+                            placeholder="cm"
+                            value={hipCirc}
+                            onChange={val => setHipCirc(val)}
+                            className="w-full text-xs h-9"
+                            min={20}
+                            max={200}
+                            step={0.1}
+                            style={{ background: '#1c1c1e', border: '1px solid var(--border-glass)' }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 mt-1">
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    loading={submittingWeight}
+                    className="h-9 px-4 text-xs font-semibold rounded-lg"
+                  >
+                    Simpan Perubahan
+                  </Button>
+                </div>
               </form>
             </div>
 
@@ -5643,6 +6050,8 @@ export default function Home() {
           </Button>
         </form>
       </Modal>
+
+
 
       {/* 7. Edit Food Library Item Modal */}
       <Modal

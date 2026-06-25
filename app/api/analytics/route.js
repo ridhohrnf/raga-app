@@ -262,11 +262,12 @@ export async function GET(request) {
       const weightLogs = await sql`
         SELECT 
           date::text AS logged_date,
-          weight::float AS weight
+          weight::float AS weight,
+          body_fat::float AS body_fat
         FROM daily_records
         WHERE user_id = ${user.id}
           AND date >= CURRENT_DATE - INTERVAL '30 days'
-          AND weight IS NOT NULL
+          AND (weight IS NOT NULL OR body_fat IS NOT NULL)
         ORDER BY date ASC
       `;
 
@@ -275,7 +276,8 @@ export async function GET(request) {
         return {
           date: log.logged_date,
           label: d.toLocaleDateString('id-ID', { month: 'short', day: 'numeric' }),
-          weight: log.weight
+          weight: log.weight,
+          bodyFat: log.body_fat !== null ? parseFloat(log.body_fat) : null
         };
       });
 

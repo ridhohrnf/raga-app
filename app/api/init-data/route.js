@@ -206,7 +206,7 @@ export async function GET(request) {
       `,
       // H5. Daily records (last 7 days)
       sql`
-        SELECT date::text AS date, weight::float AS weight, fitness_goal, tdee::int AS tdee, target_calories::int AS target_calories
+        SELECT date::text AS date, weight::float AS weight, body_fat::float AS body_fat, neck::float AS neck, waist::float AS waist, hip::float AS hip, fitness_goal, tdee::int AS tdee, target_calories::int AS target_calories
         FROM daily_records
         WHERE user_id = ${user.id} AND date >= CURRENT_DATE - INTERVAL '7 days'
       `,
@@ -225,11 +225,11 @@ export async function GET(request) {
       `,
       // H8. Weight logs (last 30 days)
       sql`
-        SELECT date::text AS date, weight::float AS weight
+        SELECT date::text AS date, weight::float AS weight, body_fat::float AS body_fat
         FROM daily_records
         WHERE user_id = ${user.id}
           AND date >= CURRENT_DATE - INTERVAL '30 days'
-          AND weight IS NOT NULL
+          AND (weight IS NOT NULL OR body_fat IS NOT NULL)
         ORDER BY date ASC
       `,
       // H9. Full user profile
@@ -417,7 +417,8 @@ export async function GET(request) {
       return {
         date: log.date,
         label: d.toLocaleDateString('id-ID', { month: 'short', day: 'numeric' }),
-        weight: log.weight
+        weight: log.weight,
+        bodyFat: log.body_fat !== null ? parseFloat(log.body_fat) : null
       };
     });
 

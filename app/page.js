@@ -698,7 +698,6 @@ export default function Home() {
         } else {
           await fetchLoggedMeals(nutritionDate);
         }
-        setActiveTab('dashboard');
       } else {
         const err = await res.json();
         message.error(err.error || 'Gagal mencatat makanan.');
@@ -927,7 +926,6 @@ export default function Home() {
           await fetchLoggedMeals(nutritionDate);
         }
         message.success('Makanan kustom berhasil dicatat ke diary harian Anda.');
-        setActiveTab('dashboard');
       } else {
         const err = await res.json();
         message.error(err.error || 'Gagal mencatat makanan.');
@@ -1018,7 +1016,6 @@ export default function Home() {
         await fetchFoodLibrary();
         await fetchLoggedMeals(nutritionDate);
         message.success('Makanan kustom berhasil dicatat dan disimpan ke pustaka Anda.');
-        setActiveTab('dashboard');
       } else {
         const err = await logRes.json();
         message.error(err.error || 'Gagal mencatat makanan.');
@@ -3078,9 +3075,47 @@ export default function Home() {
                     </div>
                   </div>
 
+                  {expandMacros && loggedMeals.length > 0 && (
+                    <div className="flex flex-col gap-2 border-t border-white/5 pt-3.5 mt-1" onClick={e => e.stopPropagation()}>
+                      <h4 className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">Daftar Makanan Hari Ini</h4>
+                      <div className="flex flex-col gap-2 max-h-[180px] overflow-y-auto pr-1">
+                        {loggedMeals.map(meal => (
+                          <div 
+                            key={meal.id} 
+                            className="flex items-center justify-between bg-white/5 border border-white/5 rounded-xl px-3 py-2 text-xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              {meal.image_data && (
+                                <img 
+                                  src={meal.image_data} 
+                                  alt={meal.food_name} 
+                                  className="w-7 h-7 object-cover rounded-lg border border-white/10 shrink-0" 
+                                />
+                              )}
+                              <div className="flex flex-col min-w-0">
+                                <span className="font-semibold text-slate-200 truncate">{meal.food_name}</span>
+                                <span className="text-[10px] text-muted">
+                                  {meal.meal_time || 'Camilan'} • {meal.weight_g}g • <span className="text-purple-glow font-medium">{Math.round(parseFloat(meal.calories))} kcal</span>
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMealLog(meal.id)}
+                              className="bg-transparent border-0 p-1.5 text-slate-400 hover:text-rose-500 hover:scale-115 active:scale-95 transition-all cursor-pointer flex items-center justify-center shrink-0"
+                              title="Hapus makanan"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {!expandMacros && (
                     <div className="text-center text-[9px] text-muted hover:text-purple transition-all -mt-1">
-                      👇 Klik untuk melihat detail makronutrisi harian Anda
+                      👇 Klik untuk melihat detail makronutrisi & daftar makanan hari ini
                     </div>
                   )}
                 </div>
@@ -4732,14 +4767,10 @@ export default function Home() {
               <Button 
                 type="primary" 
                 onClick={() => {
-                  setMealForm({ foodName: '', weightG: 100, calories: '', protein: '', carbs: '', fat: '', isCustom: false });
-                  setSelectedLibraryFood(null);
-                  setSearchFoodTerm('');
-                  setFoodActiveSubTab('library');
-                  document.getElementById('new-meal-form')?.scrollIntoView({ behavior: 'smooth' });
+                  setActiveTab('dashboard');
                 }}
                 className="h-10 text-xs font-semibold px-4 flex items-center gap-1.5"
-                icon={<Plus className="w-4 h-4" />}
+                icon={<TrendingUp className="w-4 h-4" />}
               >
                 Catat Makanan
               </Button>
@@ -4995,8 +5026,9 @@ export default function Home() {
                                       type="button"
                                       onClick={(e) => { e.stopPropagation(); handleDeleteMealLog(meal.id); }}
                                       className="bg-transparent border-0 p-1.5 text-slate-400 hover:text-rose-500 hover:scale-115 active:scale-90 transition-all cursor-pointer flex items-center justify-center shrink-0"
+                                      title="Hapus makanan"
                                     >
-                                      <Minus className="w-4 h-4" />
+                                      <Trash2 className="w-4 h-4" />
                                     </button>
                                   </div>
                                 </div>

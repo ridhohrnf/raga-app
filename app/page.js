@@ -1132,25 +1132,29 @@ export default function Home() {
   // Mengatur laju progress bar membulat (circular progress)
   useEffect(() => {
     let timer;
+    const isAllLoaded = authChecked && (!user || isInitialDataLoaded);
+
     if (loadingProgress < 100) {
-      // Jika cek auth sudah selesai, laju bertambah lebih cepat (speed lebih kecil)
-      const speed = authChecked ? 8 : 20;
-      timer = setTimeout(() => {
-        setLoadingProgress(prev => {
-          const increment = Math.floor(Math.random() * 4) + 2; // bertambah 2-5% per tick
-          const next = prev + increment;
-          return next >= 100 ? 100 : next;
-        });
-      }, speed + Math.random() * 20);
-    } else if (authChecked) {
-      // Tunggu transisi sejenak setelah 100% selesai untuk visual feel yang memuaskan
-      const fadeTimer = setTimeout(() => {
-        setLoadingAuth(false);
-      }, 250);
-      return () => clearTimeout(fadeTimer);
+      const targetCap = isAllLoaded ? 100 : 98;
+      if (loadingProgress < targetCap) {
+        // Jika cek auth & data selesai, laju bertambah lebih cepat
+        const speed = isAllLoaded ? 10 : (authChecked ? 15 : 30);
+        timer = setTimeout(() => {
+          setLoadingProgress(prev => {
+            const increment = isAllLoaded
+              ? (prev >= 98 ? 1 : Math.floor(Math.random() * 3) + 2) // smooth last steps to 100%
+              : Math.floor(Math.random() * 3) + 1; // slow down to wait for loading
+            const next = prev + increment;
+            return next >= targetCap ? targetCap : next;
+          });
+        }, speed + Math.random() * 20);
+      }
+    } else if (isAllLoaded && loadingProgress === 100) {
+      // Bener-bener pas 100% langsung masuk ke dashboard
+      setLoadingAuth(false);
     }
     return () => clearTimeout(timer);
-  }, [loadingProgress, authChecked]);
+  }, [loadingProgress, authChecked, user, isInitialDataLoaded]);
 
   const fetchInitialData = async (dateVal) => {
     try {
@@ -2622,7 +2626,7 @@ export default function Home() {
             </div>
             
             {/* Circular Progress Bar */}
-            <div className="loading-circular relative w-32 h-32 flex items-center justify-center my-3">
+            <div className="loading-circular relative w-32 h-32 flex-shrink-0 flex items-center justify-center my-3">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                 <defs>
                   <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">

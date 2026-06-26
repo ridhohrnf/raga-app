@@ -764,6 +764,15 @@ label {
   border-color: rgba(41, 151, 255, 0.15);
 }
 
+/* Ensure the loading circular progress bar size is fixed and does not shrink or grow */
+.loading-circular {
+  width: 128px !important;
+  height: 128px !important;
+  min-width: 128px !important;
+  min-height: 128px !important;
+  flex-shrink: 0 !important;
+}
+
 /* ==========================================
    DESKTOP RESPONSIVE LAYOUT (≥1024px)
    Transforms the mobile phone-frame into a

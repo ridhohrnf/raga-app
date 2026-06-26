@@ -1137,17 +1137,17 @@ export default function Home() {
     if (loadingProgress < 100) {
       const targetCap = isAllLoaded ? 100 : 98;
       if (loadingProgress < targetCap) {
-        // Jika cek auth & data selesai, laju bertambah lebih cepat
-        const speed = isAllLoaded ? 10 : (authChecked ? 15 : 30);
+        // Jika data/auth sudah siap, meluncur sangat cepat ke 100%
+        const speed = isAllLoaded ? 5 : (authChecked ? 8 : 15);
         timer = setTimeout(() => {
           setLoadingProgress(prev => {
             const increment = isAllLoaded
-              ? (prev >= 98 ? 1 : Math.floor(Math.random() * 3) + 2) // smooth last steps to 100%
-              : Math.floor(Math.random() * 3) + 1; // slow down to wait for loading
+              ? (Math.floor(Math.random() * 8) + 8) // Tambah 8-15% per tick agar cepat ke 100%
+              : (Math.floor(Math.random() * 4) + 2); // Laju normal (tambah 2-5% per tick)
             const next = prev + increment;
             return next >= targetCap ? targetCap : next;
           });
-        }, speed + Math.random() * 20);
+        }, speed + (isAllLoaded ? 0 : Math.random() * 15));
       }
     } else if (isAllLoaded && loadingProgress === 100) {
       // Bener-bener pas 100% langsung masuk ke dashboard

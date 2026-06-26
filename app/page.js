@@ -3102,7 +3102,7 @@ export default function Home() {
                             <button
                               type="button"
                               onClick={() => handleDeleteMealLog(meal.id)}
-                              className="bg-transparent border-0 p-1.5 text-slate-400 hover:text-rose-500 hover:scale-115 active:scale-95 transition-all cursor-pointer flex items-center justify-center shrink-0"
+                              className="bg-transparent border-0 p-1.5 text-[#2997ff] hover:text-rose-500 hover:scale-115 active:scale-95 transition-all cursor-pointer flex items-center justify-center shrink-0"
                               title="Hapus makanan"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -5025,7 +5025,7 @@ export default function Home() {
                                     <button 
                                       type="button"
                                       onClick={(e) => { e.stopPropagation(); handleDeleteMealLog(meal.id); }}
-                                      className="bg-transparent border-0 p-1.5 text-slate-400 hover:text-rose-500 hover:scale-115 active:scale-90 transition-all cursor-pointer flex items-center justify-center shrink-0"
+                                      className="bg-transparent border-0 p-1.5 text-[#2997ff] hover:text-rose-500 hover:scale-115 active:scale-90 transition-all cursor-pointer flex items-center justify-center shrink-0"
                                       title="Hapus makanan"
                                     >
                                       <Trash2 className="w-4 h-4" />

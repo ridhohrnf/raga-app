@@ -698,6 +698,7 @@ export default function Home() {
         } else {
           await fetchLoggedMeals(nutritionDate);
         }
+        setActiveTab('dashboard');
       } else {
         const err = await res.json();
         message.error(err.error || 'Gagal mencatat makanan.');
@@ -926,6 +927,7 @@ export default function Home() {
           await fetchLoggedMeals(nutritionDate);
         }
         message.success('Makanan kustom berhasil dicatat ke diary harian Anda.');
+        setActiveTab('dashboard');
       } else {
         const err = await res.json();
         message.error(err.error || 'Gagal mencatat makanan.');
@@ -1016,6 +1018,7 @@ export default function Home() {
         await fetchFoodLibrary();
         await fetchLoggedMeals(nutritionDate);
         message.success('Makanan kustom berhasil dicatat dan disimpan ke pustaka Anda.');
+        setActiveTab('dashboard');
       } else {
         const err = await logRes.json();
         message.error(err.error || 'Gagal mencatat makanan.');
